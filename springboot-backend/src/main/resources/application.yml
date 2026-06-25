@@ -1,0 +1,17 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: ai-knowledge-base-backend
+
+fastapi:
+  # FastAPI AI 服务地址。以后 Docker Compose 里可以改成 http://fastapi:8000。
+  base-url: http://127.0.0.1:8000
+  connect-timeout-seconds: 3
+  read-timeout-seconds: 60
+  default-candidate-k: 6
+  default-rerank-top-k: 3
+  default-rerank-min-score: 0.75
+  default-retrieval-mode: hybrid
+  default-keyword-limit: 6

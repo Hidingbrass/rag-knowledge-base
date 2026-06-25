@@ -1,0 +1,29 @@
+[
+  {
+    "rerank_min_score": 0.72,
+    "answer_pass_rate": 1.0,
+    "rejection_accuracy": 0.875,
+    "citation_valid_rate": 1.0,
+    "average_citation_support": 1.0,
+    "repeat_count": 3,
+    "is_recommended": false
+  },
+  {
+    "rerank_min_score": 0.75,
+    "answer_pass_rate": 1.0,
+    "rejection_accuracy": 1.0,
+    "citation_valid_rate": 1.0,
+    "average_citation_support": 1.0,
+    "repeat_count": 3,
+    "is_recommended": true
+  },
+  {
+    "rerank_min_score": 0.78,
+    "answer_pass_rate": 1.0,
+    "rejection_accuracy": 1.0,
+    "citation_valid_rate": 1.0,
+    "average_citation_support": 1.0,
+    "repeat_count": 3,
+    "is_recommended": false
+  }
+]

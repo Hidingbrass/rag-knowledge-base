@@ -1,0 +1,494 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>企业知识库 RAG 联调页</title>
+    <style>
+        body {
+            margin: 0;
+            background: #f5f7fb;
+            color: #1f2937;
+            font-family: Arial, "Microsoft YaHei", sans-serif;
+        }
+
+        header {
+            padding: 20px 28px;
+            background: #111827;
+            color: #ffffff;
+        }
+
+        main {
+            display: grid;
+            grid-template-columns: 360px 1fr;
+            gap: 18px;
+            padding: 18px;
+        }
+
+        section {
+            margin-bottom: 16px;
+            padding: 16px;
+            background: #ffffff;
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+            box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
+        }
+
+        h1 {
+            margin: 0 0 6px;
+            font-size: 22px;
+        }
+
+        h2 {
+            margin: 0 0 12px;
+            font-size: 17px;
+        }
+
+        label {
+            display: block;
+            margin-top: 10px;
+            margin-bottom: 4px;
+            font-size: 13px;
+            color: #4b5563;
+        }
+
+        input, textarea, select, button {
+            box-sizing: border-box;
+            width: 100%;
+            font-size: 14px;
+        }
+
+        input, textarea, select {
+            padding: 9px 10px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            background: #ffffff;
+        }
+
+        textarea {
+            min-height: 82px;
+            resize: vertical;
+        }
+
+        button {
+            margin-top: 12px;
+            padding: 10px 12px;
+            border: 0;
+            border-radius: 8px;
+            background: #2563eb;
+            color: #ffffff;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        button.secondary {
+            background: #4b5563;
+        }
+
+        button:disabled {
+            background: #9ca3af;
+            cursor: not-allowed;
+        }
+
+        .hint {
+            margin-top: 8px;
+            color: #6b7280;
+            font-size: 12px;
+            line-height: 1.5;
+        }
+
+        .status {
+            padding: 10px;
+            border-radius: 8px;
+            background: #eef2ff;
+            color: #3730a3;
+            font-size: 13px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+        }
+
+        .chat-box {
+            min-height: 360px;
+            max-height: 620px;
+            overflow: auto;
+            padding: 12px;
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+            background: #f9fafb;
+        }
+
+        .message {
+            margin-bottom: 12px;
+            padding: 12px;
+            border-radius: 10px;
+            white-space: pre-wrap;
+            line-height: 1.6;
+        }
+
+        .message.user {
+            margin-left: 15%;
+            background: #dbeafe;
+        }
+
+        .message.assistant {
+            margin-right: 15%;
+            background: #ffffff;
+            border: 1px solid #e5e7eb;
+        }
+
+        .meta {
+            margin-top: 8px;
+            color: #6b7280;
+            font-size: 12px;
+        }
+
+        .sources {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 8px;
+            background: #f3f4f6;
+            font-size: 12px;
+            color: #374151;
+        }
+
+        .row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        pre {
+            max-height: 240px;
+            overflow: auto;
+            padding: 12px;
+            border-radius: 8px;
+            background: #111827;
+            color: #d1d5db;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+<header>
+    <h1>企业知识库 RAG 联调页</h1>
+    <div class="hint">这个页面由 Spring Boot 静态资源提供，用来快速测试知识库、文档入库、会话问答和聊天记录。</div>
+</header>
+
+<main>
+    <div>
+        <section>
+            <h2>1. 创建知识库</h2>
+            <label for="kbName">知识库名称</label>
+            <input id="kbName" value="测试知识库">
+
+            <label for="kbDescription">知识库描述</label>
+            <input id="kbDescription" value="用于测试 Spring Boot 调 FastAPI 入库">
+
+            <div class="row">
+                <div>
+                    <label for="ownerId">用户 ID</label>
+                    <input id="ownerId" value="user-1">
+                </div>
+                <div>
+                    <label for="department">部门</label>
+                    <input id="department" value="研发部">
+                </div>
+            </div>
+
+            <button onclick="createKnowledgeBase()">创建知识库</button>
+            <div class="hint">创建成功后，knowledgeBaseId 会自动填入后续步骤。</div>
+        </section>
+
+        <section>
+            <h2>2. 上传 PDF</h2>
+            <label for="knowledgeBaseId">knowledgeBaseId</label>
+            <input id="knowledgeBaseId" placeholder="创建知识库后自动填入">
+
+            <label for="pdfFile">PDF 文件</label>
+            <input id="pdfFile" type="file" accept="application/pdf">
+
+            <button onclick="uploadDocument()">上传并入库</button>
+            <div class="hint">上传成功后，fastApiDocumentId 会自动填入问答区域。</div>
+        </section>
+
+        <section>
+            <h2>3. 创建会话</h2>
+            <label for="sessionTitle">会话标题</label>
+            <input id="sessionTitle" value="RAG 测试会话">
+
+            <button onclick="createSession()">创建会话</button>
+            <div class="hint">创建成功后，sessionId 会自动填入问答区域。</div>
+        </section>
+
+        <section>
+            <h2>当前状态</h2>
+            <div id="stateBox" class="status">等待操作...</div>
+            <button class="secondary" onclick="refreshMessages()">刷新消息列表</button>
+        </section>
+    </div>
+
+    <div>
+        <section>
+            <h2>4. 会话问答</h2>
+            <div class="row">
+                <div>
+                    <label for="sessionId">sessionId</label>
+                    <input id="sessionId" placeholder="创建会话后自动填入">
+                </div>
+                <div>
+                    <label for="documentId">fastApiDocumentId</label>
+                    <input id="documentId" placeholder="上传 PDF 后自动填入">
+                </div>
+            </div>
+
+            <label for="question">问题</label>
+            <textarea id="question">RAG 的英文全称是什么？</textarea>
+
+            <button onclick="askInSession()">发送问题</button>
+            <div class="hint">发送后会保存 USER 消息和 ASSISTANT 消息，然后自动刷新消息列表。</div>
+        </section>
+
+        <section>
+            <h2>聊天记录</h2>
+            <div id="chatBox" class="chat-box"></div>
+        </section>
+
+        <section>
+            <h2>最近一次接口返回</h2>
+            <pre id="rawBox">暂无</pre>
+        </section>
+    </div>
+</main>
+
+<script>
+    /*
+     * 这个前端故意不用 Vue/React。
+     * 当前阶段重点是联调 Spring Boot + FastAPI，不是学习前端框架。
+     * 直接用原生 fetch，可以更清楚地看到每个 HTTP 请求在做什么。
+     */
+
+    const state = {
+        knowledgeBaseId: "",
+        fastApiDocumentId: "",
+        sessionId: ""
+    };
+
+    function setStatus(message) {
+        document.getElementById("stateBox").textContent =
+            `knowledgeBaseId: ${state.knowledgeBaseId || "-"}\n` +
+            `fastApiDocumentId: ${state.fastApiDocumentId || "-"}\n` +
+            `sessionId: ${state.sessionId || "-"}\n\n` +
+            message;
+    }
+
+    function showRaw(data) {
+        document.getElementById("rawBox").textContent = JSON.stringify(data, null, 2);
+    }
+
+    function fillValue(id, value) {
+        document.getElementById(id).value = value || "";
+    }
+
+    async function requestJson(url, options = {}) {
+        const response = await fetch(url, options);
+        const data = await response.json();
+        showRaw(data);
+
+        if (!response.ok || data.success === false) {
+            throw new Error(data.message || `请求失败: ${response.status}`);
+        }
+
+        return data.data;
+    }
+
+    async function createKnowledgeBase() {
+        try {
+            setStatus("正在创建知识库...");
+
+            const data = await requestJson("/api/knowledge-bases", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({
+                    name: document.getElementById("kbName").value,
+                    description: document.getElementById("kbDescription").value,
+                    ownerId: document.getElementById("ownerId").value,
+                    department: document.getElementById("department").value
+                })
+            });
+
+            state.knowledgeBaseId = data.id;
+            fillValue("knowledgeBaseId", data.id);
+            setStatus("知识库创建成功。");
+        } catch (error) {
+            setStatus(`创建知识库失败: ${error.message}`);
+        }
+    }
+
+    async function uploadDocument() {
+        try {
+            const knowledgeBaseId = document.getElementById("knowledgeBaseId").value;
+            const file = document.getElementById("pdfFile").files[0];
+
+            if (!knowledgeBaseId) {
+                throw new Error("请先创建或填写 knowledgeBaseId");
+            }
+            if (!file) {
+                throw new Error("请选择 PDF 文件");
+            }
+
+            setStatus("正在上传 PDF 并调用 FastAPI 入库...");
+
+            /*
+             * 文件上传必须使用 FormData。
+             * 浏览器会自动把它发送成 multipart/form-data。
+             */
+            const formData = new FormData();
+            formData.append("file", file);
+
+            const data = await requestJson(`/api/knowledge-bases/${knowledgeBaseId}/documents`, {
+                method: "POST",
+                body: formData
+            });
+
+            state.knowledgeBaseId = knowledgeBaseId;
+            state.fastApiDocumentId = data.fastApiDocumentId;
+            fillValue("documentId", data.fastApiDocumentId);
+            setStatus(`PDF 入库成功，状态: ${data.status}，chunkCount: ${data.chunkCount}`);
+        } catch (error) {
+            setStatus(`上传 PDF 失败: ${error.message}`);
+        }
+    }
+
+    async function createSession() {
+        try {
+            const knowledgeBaseId = document.getElementById("knowledgeBaseId").value;
+            if (!knowledgeBaseId) {
+                throw new Error("请先创建或填写 knowledgeBaseId");
+            }
+
+            setStatus("正在创建聊天会话...");
+
+            const data = await requestJson("/api/chat/sessions", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({
+                    knowledgeBaseId,
+                    userId: document.getElementById("ownerId").value,
+                    title: document.getElementById("sessionTitle").value
+                })
+            });
+
+            state.knowledgeBaseId = knowledgeBaseId;
+            state.sessionId = data.id;
+            fillValue("sessionId", data.id);
+            setStatus("聊天会话创建成功。");
+            await refreshMessages();
+        } catch (error) {
+            setStatus(`创建会话失败: ${error.message}`);
+        }
+    }
+
+    async function askInSession() {
+        try {
+            const sessionId = document.getElementById("sessionId").value;
+            const documentId = document.getElementById("documentId").value;
+            const question = document.getElementById("question").value;
+
+            if (!sessionId) {
+                throw new Error("请先创建或填写 sessionId");
+            }
+
+            setStatus("正在调用 Spring Boot -> FastAPI RAG...");
+
+            await requestJson(`/api/chat/sessions/${sessionId}/ask`, {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({
+                    question,
+                    documentId
+                })
+            });
+
+            state.sessionId = sessionId;
+            state.fastApiDocumentId = documentId;
+            setStatus("问答完成，已保存聊天记录。");
+            await refreshMessages();
+        } catch (error) {
+            setStatus(`问答失败: ${error.message}`);
+        }
+    }
+
+    async function refreshMessages() {
+        const sessionId = document.getElementById("sessionId").value;
+        const chatBox = document.getElementById("chatBox");
+
+        if (!sessionId) {
+            chatBox.innerHTML = "<div class='hint'>暂无 sessionId，请先创建会话。</div>";
+            return;
+        }
+
+        try {
+            const messages = await requestJson(`/api/chat/sessions/${sessionId}/messages`);
+            chatBox.innerHTML = messages.map(renderMessage).join("");
+            chatBox.scrollTop = chatBox.scrollHeight;
+        } catch (error) {
+            chatBox.innerHTML = `<div class="hint">读取消息失败: ${error.message}</div>`;
+        }
+    }
+
+    function renderMessage(message) {
+        const roleClass = message.role === "USER" ? "user" : "assistant";
+        const roleName = message.role === "USER" ? "用户" : "AI";
+        const sourcesHtml = message.sourcesJson ? renderSources(message.sourcesJson) : "";
+
+        return `
+            <div class="message ${roleClass}">
+                <strong>${roleName}</strong>
+                <div>${escapeHtml(message.content || "")}</div>
+                <div class="meta">
+                    ${message.retrievalMode ? `retrievalMode: ${message.retrievalMode} | ` : ""}
+                    ${message.rerankElapsedSeconds ? `rerankElapsedSeconds: ${message.rerankElapsedSeconds}` : ""}
+                </div>
+                ${sourcesHtml}
+            </div>
+        `;
+    }
+
+    function renderSources(sourcesJson) {
+        try {
+            const sources = JSON.parse(sourcesJson);
+            if (!Array.isArray(sources) || sources.length === 0) {
+                return "";
+            }
+
+            const items = sources.map((source, index) => {
+                return `
+                    <div>
+                        [${index + 1}]
+                        ${escapeHtml(source.filename || "-")}
+                        page=${source.page_number ?? "-"},
+                        vector=${source.vector_score ?? "-"},
+                        rerank=${source.rerank_score ?? "-"}
+                    </div>
+                `;
+            }).join("");
+
+            return `<div class="sources"><strong>引用来源</strong>${items}</div>`;
+        } catch (error) {
+            return `<div class="sources">${escapeHtml(sourcesJson)}</div>`;
+        }
+    }
+
+    function escapeHtml(value) {
+        return String(value)
+            .replaceAll("&", "&amp;")
+            .replaceAll("<", "&lt;")
+            .replaceAll(">", "&gt;")
+            .replaceAll('"', "&quot;")
+            .replaceAll("'", "&#039;");
+    }
+
+    setStatus("页面已就绪。请按左侧 1 -> 2 -> 3，再到右侧提问。");
+</script>
+</body>
+</html>

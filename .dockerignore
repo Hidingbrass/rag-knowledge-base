@@ -1,0 +1,12 @@
+.venv/
+.env
+.git/
+.idea/
+__pycache__/
+.pytest_cache/
+*.pyc
+*.pyo
+*.pyd
+tests/
+docs/
+rag-learning-test-document.pdf
