@@ -7,8 +7,8 @@ import java.util.List;
 /**
  * FastAPI /rag/chat/rerank 的响应结构。
  *
- * Spring Boot 后续会把 answer 存成聊天消息，
- * 把 sources 存成 JSON，方便用户查看引用来源。
+ * Spring Boot 会把 answer 存成聊天消息，
+ * 并把 sources 存成 JSON，方便用户查看引用来源。
  */
 public record FastApiRagResponse(
         String question,

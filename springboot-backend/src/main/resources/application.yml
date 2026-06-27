@@ -4,9 +4,26 @@ server:
 spring:
   application:
     name: ai-knowledge-base-backend
+  datasource:
+    # MySQL 保存 Spring Boot 侧的业务数据，例如知识库、文档状态、聊天记录。
+    # 这些配置可以通过环境变量覆盖，避免把真实账号密码写死在代码里。
+    url: ${MYSQL_URL:jdbc:mysql://127.0.0.1:3307/rag_knowledge_base?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai}
+    username: ${MYSQL_USER:rag_user}
+    password: ${MYSQL_PASSWORD:rag_password}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      # 学习项目先用 update，让 Hibernate 根据 Entity 自动更新表结构。
+      # 正式生产环境一般改用 Flyway/Liquibase 管理数据库版本。
+      ddl-auto: update
+    show-sql: false
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
 
 fastapi:
-  # FastAPI AI 服务地址。以后 Docker Compose 里可以改成 http://fastapi:8000。
+  # FastAPI AI 服务地址。以后用 Docker Compose 内部通信时可以改成 http://api:8000。
   base-url: http://127.0.0.1:8000
   connect-timeout-seconds: 3
   read-timeout-seconds: 60

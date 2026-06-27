@@ -13,14 +13,16 @@ import jakarta.validation.constraints.NotBlank;
  * - question 放在请求体里，表示“用户这次问什么”。
  * - documentId 放在请求体里，表示“限制 FastAPI 只检索哪份文档”。
  *
- * documentId 第一版允许为空：
- * 不传时 FastAPI 会在整个 collection 中检索；
- * 后续做权限和知识库隔离时，再强制要求传 documentId 或 knowledgeBaseId。
+ * 当前版本强制要求 documentId：
+ * - 避免 FastAPI 在整个 Qdrant collection 里检索；
+ * - 让 Spring Boot 可以先校验文档是否属于当前会话的知识库；
+ * - 防止用户把其他知识库的 documentId 塞进当前会话里绕过权限。
  */
 public record AskInSessionRequest(
         @NotBlank(message = "问题不能为空")
         String question,
 
+        @NotBlank(message = "documentId 不能为空")
         String documentId
 ) {
 }

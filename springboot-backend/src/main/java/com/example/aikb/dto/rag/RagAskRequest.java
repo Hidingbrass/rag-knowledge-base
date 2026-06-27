@@ -3,11 +3,11 @@ package com.example.aikb.dto.rag;
 import jakarta.validation.constraints.NotBlank;
 
 /**
- * Spring Boot 对外暴露的 RAG 问答请求。
+ * 旧版 Spring Boot RAG 问答请求。
  *
- * 注意：这是“业务接口 DTO”，不是 FastAPI 原始请求。
- * Spring Boot 可以在这里放 knowledgeBaseId、documentId 等业务字段，
- * 再由 Service/Client 转成 FastAPI 需要的 JSON。
+ * 当前保留这个 DTO 只是为了让旧接口返回明确错误提示。
+ * 新的 RAG 问答统一走 /api/chat/sessions/{sessionId}/ask，
+ * 由 ChatService 负责用户权限、会话权限和 documentId 归属校验。
  */
 public record RagAskRequest(
         @NotBlank(message = "question 不能为空")

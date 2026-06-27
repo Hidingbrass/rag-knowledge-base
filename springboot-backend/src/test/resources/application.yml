@@ -1,0 +1,13 @@
+spring:
+  datasource:
+    # 测试使用 H2 内存数据库，避免依赖本机 MySQL 是否启动。
+    url: jdbc:h2:mem:aikb_test;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      # 每次测试自动建表，测试结束自动清理。
+      ddl-auto: create-drop
+    show-sql: false
+    open-in-view: false

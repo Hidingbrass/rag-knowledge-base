@@ -14,11 +14,14 @@ import java.util.UUID;
  * - 会话标题是什么。
  */
 public record CreateChatSessionRequest(
-        @NotNull(message = "知识库 ID 不能为空")
+        @NotNull(message = "knowledgeBaseId 不能为空")
         UUID knowledgeBaseId,
 
         @NotBlank(message = "用户 ID 不能为空")
         String userId,
+
+        @NotBlank(message = "部门不能为空")
+        String department,
 
         @NotBlank(message = "会话标题不能为空")
         String title

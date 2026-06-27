@@ -10,3 +10,6 @@ __pycache__/
 tests/
 docs/
 rag-learning-test-document.pdf
+springboot-backend/target/
+springboot-backend/maven-repo/
+springboot-backend/.idea/

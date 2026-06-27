@@ -1,5 +1,25 @@
 services:
-  # qdrant 是向量数据库服务，负责保存 chunk 向量和 payload。
+  # MySQL 保存 Spring Boot 业务数据：
+  # 知识库、文档状态、聊天会话、聊天消息，后续也可以保存用户和权限。
+  mysql:
+    image: mysql:8.4
+    container_name: rag-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_password}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-rag_knowledge_base}
+      MYSQL_USER: ${MYSQL_USER:-rag_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-rag_password}
+    ports:
+      # 宿主机 3306 经常会被本机 MySQL 占用，所以这里用 3307 暴露给 Spring Boot。
+      # 容器内部仍然是 MySQL 默认端口 3306。
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+
+  # Qdrant 保存 RAG chunk 的向量和 payload。
   qdrant:
     image: qdrant/qdrant:v1.14.1
     container_name: rag-qdrant
@@ -7,10 +27,9 @@ services:
       - "6333:6333"
       - "6334:6334"
     volumes:
-      # 把 Qdrant 数据持久化到 Docker volume，避免容器重启后数据丢失。
       - qdrant_storage:/qdrant/storage
 
-  # api 是当前 FastAPI RAG 服务。
+  # FastAPI RAG 服务。
   api:
     build:
       context: .
@@ -19,13 +38,14 @@ services:
     env_file:
       - .env
     environment:
-      # 容器之间通过 service name 通信，所以这里不能写 127.0.0.1。
+      # 容器之间通过 service name 通信，所以这里使用 qdrant，不使用 127.0.0.1。
       QDRANT_URL: http://qdrant:6333
-      LOG_LEVEL: INFO
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
     ports:
       - "8000:8000"
     depends_on:
       - qdrant
 
 volumes:
+  mysql_data:
   qdrant_storage:

@@ -5,9 +5,9 @@
 当前定位：
 
 ```text
-用户 / Swagger / 后续 Vue
+用户 / 静态联调页面 / Postman
 -> Spring Boot 业务服务
-   -> 管理知识库、文档状态、后续聊天记录和用户权限
+   -> 管理知识库、文档状态、聊天记录和用户权限
    -> 通过 HTTP 调用 FastAPI AI 服务
       -> PDF 解析、切分、Embedding、Qdrant、RAG、Rerank
 ```
@@ -30,7 +30,8 @@ Spring Boot 负责企业业务：
 - 知识库和文档状态
 - 聊天会话和消息记录
 - 调用 FastAPI
-- 后续 MySQL / Redis / 限流 / 日志 / 审计
+- MySQL 持久化
+- 后续 Redis / 限流 / 日志 / 审计
 
 面试表达：
 
@@ -47,11 +48,14 @@ Spring Boot 更适合承载稳定的企业业务系统，FastAPI 更适合承载
 - FastAPI 地址和默认 RAG 参数配置
 - FastAPI RAG Client
 - 健康检查接口
-- RAG 问答代理接口
 - 知识库创建、查询、列表
-- 文档上传入库、状态保存、文档列表
-- 内存版 Repository
-- Spring Boot 启动测试和核心 Service 单元测试
+- 文档上传入库、重复检测、状态保存、文档列表
+- 聊天会话、聊天消息保存、RAG 问答
+- MySQL + Spring Data JPA 持久化
+- owner / 同部门用户 / 无权限用户访问控制
+- 文档归属校验：提问时 `documentId` 必须属于当前会话的知识库
+- 旧版 `/api/rag/ask` 直连接口已停用，避免绕过权限校验
+- Spring Boot 启动测试、Service 测试、Controller 权限测试
 - Spring Boot -> FastAPI -> Qdrant -> RAG 问答端到端联调通过
 
 阶段 1 联调记录见：
@@ -71,6 +75,12 @@ http://127.0.0.1:8080/index.html
 ```
 
 这个页面支持创建知识库、上传 PDF、创建会话、发起 RAG 问答和查看聊天记录。
+
+面试演示步骤见：
+
+```text
+../docs/day3_frontend_demo_script.md
+```
 
 ### 健康检查
 
@@ -109,7 +119,7 @@ GET /api/knowledge-bases/{knowledgeBaseId}
 ### 上传文档并触发 FastAPI 入库
 
 ```text
-POST /api/knowledge-bases/{knowledgeBaseId}/documents
+POST /api/knowledge-bases/{knowledgeBaseId}/documents?userId=user-1&department=研发部
 Content-Type: multipart/form-data
 file: PDF 文件
 ```
@@ -117,56 +127,99 @@ file: PDF 文件
 Spring Boot 会做：
 
 ```text
-校验知识库存在
+校验当前用户是否能访问知识库
 -> 校验 PDF 文件
+-> 计算文件 SHA-256
+-> 在当前知识库内做重复上传检测
 -> 创建文档记录，状态为 PROCESSING
 -> 调用 FastAPI /documents/index
 -> 保存 FastAPI 返回的 document_id、chunk_count、file_hash
 -> 状态变成 AVAILABLE
 ```
 
+如果命中重复上传，Spring Boot 会直接复用已有文档记录，不再调用 FastAPI。
 如果 FastAPI 调用失败，文档状态会变成 `FAILED`。
 
 ### 查询知识库下的文档
 
 ```text
-GET /api/knowledge-bases/{knowledgeBaseId}/documents
+GET /api/knowledge-bases/{knowledgeBaseId}/documents?userId=user-1&department=研发部
 ```
 
-### RAG 问答代理
+### 创建聊天会话
 
 ```text
-POST /api/rag/ask
+POST /api/chat/sessions
+Content-Type: application/json
+```
+
+```json
+{
+  "knowledgeBaseId": "知识库 UUID",
+  "userId": "user-1",
+  "department": "研发部",
+  "title": "RAG 测试会话"
+}
+```
+
+### 查询当前用户的会话列表
+
+```text
+GET /api/chat/sessions?userId=user-1
+```
+
+### 查询会话消息
+
+```text
+GET /api/chat/sessions/{sessionId}/messages?userId=user-1&department=研发部
+```
+
+### 在会话中发起 RAG 问答
+
+```text
+POST /api/chat/sessions/{sessionId}/ask?userId=user-1&department=研发部
 Content-Type: application/json
 ```
 
 ```json
 {
   "question": "RAG 的英文全称是什么？",
-  "documentId": null
+  "documentId": "FastAPI/Qdrant 文档 ID"
 }
 ```
 
-Spring Boot 会转换成 FastAPI 需要的请求：
+Spring Boot 会先校验：
 
-```json
-{
-  "question": "RAG 的英文全称是什么？",
-  "candidate_k": 6,
-  "rerank_top_k": 3,
-  "rerank_min_score": 0.75,
-  "retrieval_mode": "hybrid",
-  "keyword_limit": 6,
-  "document_id": null
-}
+```text
+用户是否能访问 session 所属知识库
+-> documentId 是否存在
+-> documentId 是否属于当前 session 的知识库
+-> 文档状态是否为 AVAILABLE
+-> 保存 USER 消息
+-> 调用 FastAPI /rag/chat/rerank
+-> 保存 ASSISTANT 消息和引用来源
 ```
+
+### 旧版 RAG 直连接口
+
+```text
+POST /api/rag/ask
+```
+
+该接口已停用。正式问答必须使用：
+
+```text
+POST /api/chat/sessions/{sessionId}/ask
+```
+
+原因：旧接口无法校验 session 权限和 documentId 归属，可能绕过知识库权限边界。
 
 ## 启动与测试
 
-先确保 FastAPI 服务运行在：
+完整启动说明见：
 
 ```text
-http://127.0.0.1:8000
+../docs/startup_guide.md
 ```
 
 运行测试：
@@ -175,21 +228,21 @@ http://127.0.0.1:8000
 mvn -s maven-settings.xml test
 ```
 
-启动 Spring Boot：
+启动 Spring Boot 前，请确保 MySQL 已在 `127.0.0.1:3307` 启动。
+
+启动命令：
 
 ```powershell
 mvn -s maven-settings.xml spring-boot:run
 ```
 
-## 当前取舍
-
-现在知识库和文档数据先保存在内存里。
-
-原因：
+## 当前权限规则
 
 ```text
-先把完整业务链路跑通，再接 MySQL。
-这样 Controller / Service / Client / DTO 的结构不会变，后续只需要把内存 Repository 替换成 JPA Repository。
+知识库 owner 可以访问
+同部门用户可以访问
+其他用户拒绝访问，返回 HTTP 403
 ```
 
-下一步会进入聊天会话和 RAG 问答记录保存。
+当前学习版用 `userId + department` 请求参数模拟登录态。
+真实项目里这部分会替换成 Spring Security / JWT，从登录用户信息中读取身份和部门。
