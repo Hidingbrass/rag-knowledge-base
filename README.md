@@ -10,6 +10,7 @@
 
 - [项目一简历材料](docs/resume_project_one.md)
 - [完整项目简历材料](docs/resume_full_project.md)
+- [求职辅助 Agent 设计说明](docs/job_agent_design.md)
 - [项目一面试讲解手册](docs/interview_project_one.md)
 - [一周完整项目冲刺计划](docs/one_week_full_project_plan.md)
 - [RAG + Rerank 实验报告](docs/rag_rerank_experiment_report.md)
