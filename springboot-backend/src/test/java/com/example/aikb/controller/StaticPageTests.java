@@ -37,7 +37,9 @@ class StaticPageTests {
                 .andExpect(content().string(containsString("checkHealth()")))
                 .andExpect(content().string(containsString("quick-buttons")))
                 .andExpect(content().string(containsString("availableDocCount")))
-                .andExpect(content().string(containsString("nextActionBox")));
+                .andExpect(content().string(containsString("nextActionBox")))
+                .andExpect(content().string(containsString("jobTaskCount")))
+                .andExpect(content().string(containsString("analyzeJob()")));
     }
 
     @Test

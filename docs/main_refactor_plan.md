@@ -597,7 +597,7 @@ tests/
 当前结果：
 
 ```text
-67 passed
+72 passed
 ```
 
 ### 已完成：Docker Compose 和启动文档
@@ -633,7 +633,7 @@ docker compose config
 
 ```text
 docker compose config 通过
-67 passed
+72 passed
 ```
 
 ## 6. 风险与回归测试

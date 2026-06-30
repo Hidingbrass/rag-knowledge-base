@@ -10,7 +10,9 @@
 
 from fastapi.testclient import TestClient
 
+from app.api import job as job_api
 from app.main import app
+from app.schemas.job import JobAnalyzeResponse
 
 
 client = TestClient(app)
@@ -36,9 +38,53 @@ def test_original_routes_are_registered():
         "/embedding/test",
         "/rag/chat",
         "/rag/chat/rerank",
+        "/job/analyze",
     }
 
     assert expected_paths.issubset(route_paths)
+
+
+def test_job_analyze_route_calls_service(monkeypatch):
+    """求职分析路由应该接收请求体，并把结果按 JobAnalyzeResponse 返回。"""
+    captured = {}
+
+    def fake_analyze_job_match(request):
+        captured["resume_text"] = request.resume_text
+        captured["job_description"] = request.job_description
+        return JobAnalyzeResponse(
+            match_score=88,
+            matched_skills=["FastAPI", "RAG"],
+            missing_skills=["Redis"],
+            strengths=["项目链路完整"],
+            risks=["缓存经验体现较少"],
+            suggestions=["补充 Redis 使用场景"],
+            interview_questions=["Rerank 解决了什么问题？"],
+        )
+
+    monkeypatch.setattr(job_api, "analyze_job_match", fake_analyze_job_match)
+
+    response = client.post(
+        "/job/analyze",
+        json={
+            "resume_text": "我做过 FastAPI RAG 项目。",
+            "job_description": "岗位要求 FastAPI、RAG、Redis。",
+        },
+    )
+
+    assert response.status_code == 200
+    assert captured == {
+        "resume_text": "我做过 FastAPI RAG 项目。",
+        "job_description": "岗位要求 FastAPI、RAG、Redis。",
+    }
+    assert response.json() == {
+        "match_score": 88,
+        "matched_skills": ["FastAPI", "RAG"],
+        "missing_skills": ["Redis"],
+        "strengths": ["项目链路完整"],
+        "risks": ["缓存经验体现较少"],
+        "suggestions": ["补充 Redis 使用场景"],
+        "interview_questions": ["Rerank 解决了什么问题？"],
+    }
 
 
 def test_rerank_top_k_greater_than_candidate_k_returns_bad_request():

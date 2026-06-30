@@ -47,7 +47,7 @@ Python, FastAPI, Pydantic, Qdrant, DashScope, 通义千问 Embedding/Chat, qwen3
 当前自动化测试：
 
 ```text
-pytest 全量回归：67 passed。
+pytest 全量回归：72 passed。
 ```
 
 历史 Rerank 优化效果：
@@ -103,4 +103,3 @@ candidate_k=6、rerank_top_k=3 时，rerank_min_score=0.75 和 0.78 都能保持
 ```text
 通过检索增强、引用来源、拒答机制和评测脚本降低幻觉风险。
 ```
-

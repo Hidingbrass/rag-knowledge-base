@@ -154,7 +154,7 @@
 
         .stat-grid {
             display: grid;
-            grid-template-columns: repeat(5, 1fr);
+            grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
             gap: 8px;
             margin-top: 10px;
         }
@@ -319,8 +319,8 @@
 <header>
     <h1>企业知识库 RAG 联调页</h1>
     <div class="hint">
-        这个页面由 Spring Boot 静态资源提供，用来快速测试知识库、PDF 入库、会话问答和聊天记录。
-        页面刷新后会重新从 MySQL 加载知识库、文档和会话。
+        这个页面由 Spring Boot 静态资源提供，用来快速测试知识库、PDF 入库、会话问答、聊天记录和求职辅助 Agent。
+        页面刷新后会重新从 MySQL 加载知识库、文档、会话和求职分析历史。
     </div>
 </header>
 
@@ -333,6 +333,7 @@
                 <li>创建或选择知识库，上传 PDF，观察重复上传提示。</li>
                 <li>创建会话，选择 fastApiDocumentId 后发起 RAG 问答。</li>
                 <li>查看聊天记录、引用来源、rerank 分数和权限失败提示。</li>
+                <li>输入简历和岗位 JD，调用求职辅助 Agent，并从 MySQL 查询历史记录。</li>
             </ol>
             <div class="toolbar">
                 <button class="secondary small" onclick="checkHealth()">检查 Spring Boot</button>
@@ -435,6 +436,10 @@
                     <strong id="sessionCount">0</strong>
                     <span>当前用户会话</span>
                 </div>
+                <div class="stat-card">
+                    <strong id="jobTaskCount">0</strong>
+                    <span>求职记录</span>
+                </div>
             </div>
             <div id="stateBox" class="status">等待加载...</div>
             <div id="nextActionBox" class="next-action">等待加载下一步建议...</div>
@@ -478,6 +483,30 @@
         </section>
 
         <section>
+            <h2>5. 求职辅助 Agent</h2>
+            <label for="jobUserId">userId</label>
+            <input id="jobUserId" value="demo-user">
+
+            <label for="jobResumeText">简历文本</label>
+            <textarea id="jobResumeText">我做过 Spring Boot + FastAPI 企业知识库 RAG 项目，使用 MySQL 保存业务数据，使用 Qdrant 保存向量，接入通义千问完成 Embedding、Rerank 和问答。</textarea>
+
+            <label for="jobDescription">岗位 JD</label>
+            <textarea id="jobDescription">岗位要求熟悉 Java、Spring Boot、MySQL、Python、FastAPI，有 AI 应用或 RAG 项目经验，了解向量数据库和大模型调用。</textarea>
+
+            <div class="toolbar">
+                <button onclick="analyzeJob()">分析并保存</button>
+                <button class="secondary" onclick="loadJobTasks()">刷新历史</button>
+            </div>
+            <div class="hint">分析结果会保存到 MySQL 的 job_analysis_task 表，刷新历史会调用 GET /api/job-agent/tasks。</div>
+            <pre id="jobResultBox">暂无求职分析结果</pre>
+        </section>
+
+        <section>
+            <h2>求职分析历史</h2>
+            <div id="jobTaskBox" class="chat-box"></div>
+        </section>
+
+        <section>
             <h2>最近一次接口返回</h2>
             <pre id="rawBox">暂无</pre>
         </section>
@@ -503,7 +532,8 @@
         // 页面缓存的列表数据。刷新页面后会清空，所以要通过 loadInitialData 从后端重新加载。
         knowledgeBases: [],
         documents: [],
-        sessions: []
+        sessions: [],
+        jobTasks: []
     };
 
     function setStatus(message) {
@@ -532,6 +562,7 @@
         document.getElementById("availableDocCount").textContent = availableDocuments().length;
         document.getElementById("failedDocCount").textContent = failedDocuments().length;
         document.getElementById("sessionCount").textContent = state.sessions.length;
+        document.getElementById("jobTaskCount").textContent = state.jobTasks.length;
     }
 
     function updateNextAction() {
@@ -660,6 +691,7 @@
             setStatus("正在从 MySQL 加载已保存的数据...");
             await loadKnowledgeBases();
             await loadSessions();
+            await loadJobTasks(false);
             setStatus("已从 MySQL 恢复页面状态。");
         } catch (error) {
             setStatus(`加载历史数据失败: ${error.message}`);
@@ -678,6 +710,7 @@
             `可提问文档数量：${availableDocuments().length}`,
             `失败文档数量：${failedDocuments().length}`,
             `当前用户会话数量：${state.sessions.length}`,
+            `求职分析记录数量：${state.jobTasks.length}`,
             buildNextAction(),
             "核心链路：Spring Boot 管业务、权限和 MySQL；FastAPI 管 PDF 解析、向量入库、RAG 和 Rerank。"
         ].join("\n");
@@ -965,6 +998,107 @@
     function setQuickQuestion(question) {
         fillValue("question", question);
         setStatus(`已填入快捷问题：${question}`);
+    }
+
+    async function analyzeJob() {
+        try {
+            const userId = document.getElementById("jobUserId").value;
+            const resumeText = document.getElementById("jobResumeText").value;
+            const jobDescription = document.getElementById("jobDescription").value;
+
+            if (!userId) {
+                throw new Error("请填写 userId");
+            }
+            if (!resumeText) {
+                throw new Error("请填写简历文本");
+            }
+            if (!jobDescription) {
+                throw new Error("请填写岗位 JD");
+            }
+
+            setStatus("正在调用 Spring Boot -> FastAPI 求职辅助 Agent...");
+            const data = await requestJson("/api/job-agent/analyze", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({
+                    userId,
+                    resumeText,
+                    jobDescription
+                })
+            });
+
+            document.getElementById("jobResultBox").textContent = JSON.stringify(data, null, 2);
+            await loadJobTasks(false);
+            setStatus(`求职分析完成并已保存，匹配分：${data.match_score ?? data.matchScore ?? "-"}`);
+        } catch (error) {
+            setStatus(`求职分析失败: ${error.message}`);
+        }
+    }
+
+    async function loadJobTasks(showStatus = true) {
+        const userId = document.getElementById("jobUserId").value;
+        const jobTaskBox = document.getElementById("jobTaskBox");
+
+        if (!userId) {
+            state.jobTasks = [];
+            jobTaskBox.innerHTML = "<div class='hint'>请先填写 userId。</div>";
+            updateCounters();
+            return;
+        }
+
+        try {
+            state.jobTasks = await requestJson(`/api/job-agent/tasks?userId=${encodeURIComponent(userId)}`);
+            jobTaskBox.innerHTML = state.jobTasks.length > 0
+                ? state.jobTasks.map(renderJobTask).join("")
+                : "<div class='hint'>暂无求职分析历史。</div>";
+            updateCounters();
+            if (showStatus) {
+                setStatus(`已加载 ${state.jobTasks.length} 条求职分析历史。`);
+            }
+        } catch (error) {
+            state.jobTasks = [];
+            updateCounters();
+            jobTaskBox.innerHTML = `<div class="hint">读取求职历史失败: ${escapeHtml(error.message)}</div>`;
+            if (showStatus) {
+                setStatus(`读取求职历史失败: ${error.message}`);
+            }
+        }
+    }
+
+    function renderJobTask(task) {
+        return `
+            <div class="message assistant">
+                <strong>匹配分：${escapeHtml(task.matchScore ?? "-")}</strong>
+                <div class="meta">
+                    userId: ${escapeHtml(task.userId || "-")} |
+                    createdAt: ${escapeHtml(task.createdAt || "-")}
+                </div>
+                <div><strong>简历</strong></div>
+                <div>${escapeHtml(shortText(task.resumeText || ""))}</div>
+                <div><strong>岗位 JD</strong></div>
+                <div>${escapeHtml(shortText(task.jobDescription || ""))}</div>
+                <div class="sources">${renderJobResultSummary(task.resultJson)}</div>
+            </div>
+        `;
+    }
+
+    function renderJobResultSummary(resultJson) {
+        if (!resultJson) {
+            return "暂无分析结果";
+        }
+
+        try {
+            const result = JSON.parse(resultJson);
+            return `
+                <strong>分析结果</strong>
+                <div>匹配技能：${escapeHtml((result.matched_skills || []).join("、") || "-")}</div>
+                <div>缺失技能：${escapeHtml((result.missing_skills || []).join("、") || "-")}</div>
+                <div>建议：${escapeHtml((result.suggestions || []).slice(0, 2).join("；") || "-")}</div>
+                <div>面试题：${escapeHtml((result.interview_questions || []).slice(0, 2).join("；") || "-")}</div>
+            `;
+        } catch (error) {
+            return escapeHtml(shortText(resultJson));
+        }
     }
 
     async function refreshMessages() {
