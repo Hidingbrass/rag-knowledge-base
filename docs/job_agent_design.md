@@ -334,21 +334,28 @@ Spring Boot 侧重点是业务链路和数据库保存：
 6. 其他 userId 访问别人的 taskId 时返回 403。
 7. DELETE /api/job-agent/tasks/{taskId} 能删除自己的历史记录。
 8. 其他 userId 删除别人的 taskId 时返回 403，且数据库记录仍然存在。
-9. 静态演示页包含求职 Agent 入口。
+9. Vue3 企业工作台包含求职 Agent 入口。
+10. 原始联调页 debug.html 仍保留求职 Agent 调试入口。
 ```
 
 当前 Spring Boot 全量测试：
 
 ```text
-29 passed
+30 passed
 ```
 
 ## 9. 前端演示
 
-静态演示页：
+Vue3 企业工作台：
 
 ```text
 http://127.0.0.1:8080/index.html
+```
+
+原始联调页：
+
+```text
+http://127.0.0.1:8080/debug.html
 ```
 
 已新增：

@@ -150,12 +150,20 @@ Spring Boot 负责：
 - 调用 FastAPI
 - MySQL 持久化
 
-### 2.4 打开前端演示页
+### 2.4 打开前端页面
 
 浏览器访问：
 
 ```text
 http://127.0.0.1:8080/index.html
+```
+
+`index.html` 是 Vue3 企业知识库工作台。
+
+如需使用原始联调页，访问：
+
+```text
+http://127.0.0.1:8080/debug.html
 ```
 
 如果页面没有显示最新内容：
@@ -291,7 +299,8 @@ mvn -s maven-settings.xml test
 - 文档权限 Controller
 - 聊天权限 Controller
 - 旧版 RAG 接口停用
-- 静态演示页 `/index.html`
+- Vue3 企业工作台 `/index.html`
+- 原始联调页 `/debug.html`
 - `/favicon.ico` 不再误报 500
 
 ## 7. 评测脚本
@@ -454,6 +463,7 @@ docker compose down -v
 [ ] FastAPI 已启动，/health 正常
 [ ] Spring Boot 已启动，/api/health 正常
 [ ] http://127.0.0.1:8080/index.html 能打开
+[ ] http://127.0.0.1:8080/debug.html 能打开
 [ ] 页面能从 MySQL 恢复知识库、文档和会话
 [ ] 至少有一个 AVAILABLE 文档
 [ ] 可以发送一个 RAG 问题

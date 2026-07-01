@@ -17,8 +17,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *
  * 这个页面不是核心业务逻辑，但它是面试演示入口。
  * 所以这里做轻量保护：
- * - /index.html 能正常返回；
- * - 页面包含关键演示区域；
+ * - /index.html 能正常返回企业工作台；
+ * - /debug.html 保留原始联调页；
  * - 浏览器自动请求 /favicon.ico 时不会被误处理成 500。
  */
 @SpringBootTest
@@ -29,8 +29,23 @@ class StaticPageTests {
     private MockMvc mockMvc;
 
     @Test
-    void indexPageShouldBeServedWithDemoSections() throws Exception {
+    void indexPageShouldBeServedWithVueWorkspace() throws Exception {
         mockMvc.perform(get("/index.html"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("<meta charset=\"UTF-8\">")))
+                .andExpect(content().string(containsString("https://unpkg.com/vue@3")))
+                .andExpect(content().string(containsString("createApp")))
+                .andExpect(content().string(containsString("debug.html")))
+                .andExpect(content().string(containsString("activeTab")))
+                .andExpect(content().string(containsString("loadInitialData")))
+                .andExpect(content().string(containsString("viewJobTask")))
+                .andExpect(content().string(containsString("deleteJobTask")))
+                .andExpect(content().string(containsString("method: \"DELETE\"")));
+    }
+
+    @Test
+    void debugPageShouldKeepOriginalIntegrationConsole() throws Exception {
+        mockMvc.perform(get("/debug.html"))
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("<meta charset=\"UTF-8\">")))
                 .andExpect(content().string(containsString("demo-steps")))
