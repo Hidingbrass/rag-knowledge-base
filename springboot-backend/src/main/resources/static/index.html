@@ -106,6 +106,10 @@
             background: #4b5563;
         }
 
+        button.danger {
+            background: #dc2626;
+        }
+
         button.small {
             margin-top: 0;
             padding: 8px 10px;
@@ -1078,8 +1082,57 @@
                 <div><strong>岗位 JD</strong></div>
                 <div>${escapeHtml(shortText(task.jobDescription || ""))}</div>
                 <div class="sources">${renderJobResultSummary(task.resultJson)}</div>
+                <div class="toolbar">
+                    <button class="secondary small" onclick="viewJobTaskDetail('${escapeHtml(task.id || "")}')">查看详情</button>
+                    <button class="danger small" onclick="deleteJobTask('${escapeHtml(task.id || "")}')">删除</button>
+                </div>
             </div>
         `;
+    }
+
+    async function viewJobTaskDetail(taskId) {
+        try {
+            const userId = document.getElementById("jobUserId").value;
+            if (!userId) {
+                throw new Error("请填写 userId");
+            }
+            if (!taskId) {
+                throw new Error("缺少求职分析记录 ID");
+            }
+
+            const data = await requestJson(
+                `/api/job-agent/tasks/${encodeURIComponent(taskId)}?userId=${encodeURIComponent(userId)}`
+            );
+            document.getElementById("jobResultBox").textContent = JSON.stringify(data, null, 2);
+            setStatus("已加载求职分析详情。");
+        } catch (error) {
+            setStatus(`读取求职分析详情失败: ${error.message}`);
+        }
+    }
+
+    async function deleteJobTask(taskId) {
+        try {
+            const userId = document.getElementById("jobUserId").value;
+            if (!userId) {
+                throw new Error("请填写 userId");
+            }
+            if (!taskId) {
+                throw new Error("缺少求职分析记录 ID");
+            }
+            if (!confirm("确定删除这条求职分析记录吗？")) {
+                return;
+            }
+
+            await requestJson(
+                `/api/job-agent/tasks/${encodeURIComponent(taskId)}?userId=${encodeURIComponent(userId)}`,
+                {method: "DELETE"}
+            );
+            await loadJobTasks(false);
+            document.getElementById("jobResultBox").textContent = "求职分析记录已删除。";
+            setStatus("求职分析记录已删除。");
+        } catch (error) {
+            setStatus(`删除求职分析记录失败: ${error.message}`);
+        }
     }
 
     function renderJobResultSummary(resultJson) {

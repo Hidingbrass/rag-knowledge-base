@@ -449,7 +449,7 @@ Qdrant 检查: http://127.0.0.1:8000/qdrant/health
 
 - 继续整理 README、简历材料和面试讲解，统一成“Spring Boot + FastAPI 企业知识库 + 求职辅助 Agent”项目口径。
 - 补充 GitHub 提交前检查清单，确认 `.env`、构建产物和本地数据不会提交。
-- 继续增强求职辅助 Agent：简历结构化解析、JD 结构化解析、前端历史详情/删除交互和更完整的前端展示。
+- 继续增强求职辅助 Agent：简历结构化解析、JD 结构化解析、分析结果分区展示和更完整的前端展示。
 
 ## 最终验证清单
 
@@ -494,10 +494,10 @@ python -m app.evaluation.evaluate_rerank_params
 - 求职分析结果已持久化到 MySQL `job_analysis_task` 表，并支持 `GET /api/job-agent/tasks?userId=demo-user` 查询历史记录。
 - 已新增 `GET /api/job-agent/tasks/{taskId}?userId=demo-user` 查询单条求职分析详情，并通过 userId 校验防止越权访问。
 - 已新增 `DELETE /api/job-agent/tasks/{taskId}?userId=demo-user` 删除单条求职分析记录，并通过 userId 校验防止越权删除。
-- 静态演示页已新增求职分析区域，可在浏览器里完成“分析并保存”和“刷新历史”。
+- 静态演示页已新增求职分析区域，可在浏览器里完成“分析并保存”、“刷新历史”、“查看详情”和“删除历史记录”。
 
 ## 后续任务流程
 
 1. GitHub 提交前检查：确认密钥、构建产物、本地数据库数据不会提交。
 2. 项目展示材料整理：统一 README、简历材料、面试讲解和演示脚本。
-3. 求职辅助 Agent 增强：补充简历/JD 结构化解析、前端历史详情/删除交互和更细的面试准备建议。
+3. 求职辅助 Agent 增强：补充简历/JD 结构化解析、分析结果分区展示和更细的面试准备建议。

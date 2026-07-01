@@ -39,7 +39,10 @@ class StaticPageTests {
                 .andExpect(content().string(containsString("availableDocCount")))
                 .andExpect(content().string(containsString("nextActionBox")))
                 .andExpect(content().string(containsString("jobTaskCount")))
-                .andExpect(content().string(containsString("analyzeJob()")));
+                .andExpect(content().string(containsString("analyzeJob()")))
+                .andExpect(content().string(containsString("viewJobTaskDetail")))
+                .andExpect(content().string(containsString("deleteJobTask")))
+                .andExpect(content().string(containsString("method: \"DELETE\"")));
     }
 
     @Test
