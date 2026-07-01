@@ -28,7 +28,7 @@ Spring Boot + FastAPI 企业智能知识库 RAG 问答系统 + 求职辅助 Agen
 - 在 FastAPI 中实现无 Rerank 与 Rerank 两条链路，保留 vector_score 并新增 rerank_score，通过 rerank_min_score 控制拒答。
 - 建立 30 条评测集，覆盖普通问答和拒答题，评估 Hit@K、拒答准确率、答案关键词召回、引用有效率、引用支持率、fallback 和 Rerank 耗时。
 - 提供静态前端演示页，支持创建知识库、上传 PDF、创建会话、提问、查看引用来源、切换用户身份和权限验证。
-- 扩展求职辅助 Agent：FastAPI 负责构建求职分析 Prompt、调用通义千问并解析 JSON；Spring Boot 提供 `POST /api/job-agent/analyze`、`GET /api/job-agent/tasks` 和 `GET /api/job-agent/tasks/{taskId}`，保存、查询求职分析历史并校验详情访问权限。
+- 扩展求职辅助 Agent：FastAPI 负责构建求职分析 Prompt、调用通义千问并解析 JSON；Spring Boot 提供 `POST /api/job-agent/analyze`、`GET /api/job-agent/tasks`、`GET /api/job-agent/tasks/{taskId}` 和 `DELETE /api/job-agent/tasks/{taskId}`，保存、查询、删除求职分析历史并校验访问权限。
 - 使用 pytest 和 JUnit 固化回归测试，覆盖 FastAPI 核心链路、评测工具函数、Spring Boot 权限边界、聊天流程、文档重复检测和静态页面。
 - 使用 Docker Compose 管理 MySQL、Qdrant 和 FastAPI 容器，配合 .env.example、启动文档和新电脑恢复指南提升项目可复现性。
 ```
@@ -62,7 +62,7 @@ Java 21, Spring Boot, Spring Data JPA, MySQL, Python, FastAPI, Pydantic, Qdrant,
 
 ```text
 FastAPI pytest：72 passed
-Spring Boot Maven test：27 passed
+Spring Boot Maven test：29 passed
 ```
 
 Rerank 阈值实验结论：

@@ -6,6 +6,7 @@ import com.example.aikb.dto.job.JobAnalysisTaskResponse;
 import com.example.aikb.dto.job.JobAnalyzeRequest;
 import com.example.aikb.service.JobAgentService;
 import jakarta.validation.Valid;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -47,5 +48,14 @@ public class JobAgentController {
             @RequestParam String userId
     ) {
         return ApiResponse.ok(jobAgentService.getTask(taskId, userId));
+    }
+
+    @DeleteMapping("/tasks/{taskId}")
+    public ApiResponse<Void> deleteTask(
+            @PathVariable UUID taskId,
+            @RequestParam String userId
+    ) {
+        jobAgentService.deleteTask(taskId, userId);
+        return ApiResponse.ok(null);
     }
 }

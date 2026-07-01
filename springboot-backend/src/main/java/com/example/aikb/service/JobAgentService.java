@@ -90,12 +90,22 @@ public class JobAgentService {
     }
 
     public JobAnalysisTaskResponse getTask(UUID taskId, String userId) {
+        JobAnalysisTask task = getOwnedTask(taskId, userId);
+        return toResponse(task);
+    }
+
+    private JobAnalysisTask getOwnedTask(UUID taskId, String userId) {
         JobAnalysisTask task = jobAnalysisTaskRepository.findById(taskId)
                 .orElseThrow(() -> new BusinessException("求职分析记录不存在: " + taskId));
         if (!task.userId().equals(userId)) {
             throw new ForbiddenException("无权访问该求职分析记录: " + taskId);
         }
 
-        return toResponse(task);
+        return task;
+    }
+
+    public void deleteTask(UUID taskId, String userId) {
+        JobAnalysisTask task = getOwnedTask(taskId, userId);
+        jobAnalysisTaskRepository.delete(task);
     }
 }

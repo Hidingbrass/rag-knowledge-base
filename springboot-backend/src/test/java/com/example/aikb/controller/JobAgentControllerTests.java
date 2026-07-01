@@ -21,6 +21,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -188,5 +189,50 @@ class JobAgentControllerTests {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.message").value("无权访问该求职分析记录: " + taskId));
+    }
+
+    @Test
+    void deleteTaskShouldRemoveJobAnalysisTask() throws Exception {
+        UUID taskId = UUID.randomUUID();
+        jobAnalysisTaskRepository.save(new JobAnalysisTask(
+                taskId,
+                "demo-user",
+                "Spring Boot FastAPI RAG 项目",
+                "需要 Java、Spring Boot、FastAPI、RAG",
+                95,
+                "{\"match_score\":95,\"matched_skills\":[\"Spring Boot\"]}",
+                Instant.now()
+        ));
+
+        mockMvc.perform(delete("/api/job-agent/tasks/{taskId}", taskId)
+                        .param("userId", "demo-user"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.message").value("ok"))
+                .andExpect(jsonPath("$.data").doesNotExist());
+
+        assertThat(jobAnalysisTaskRepository.findById(taskId)).isEmpty();
+    }
+
+    @Test
+    void deleteTaskShouldReturnForbiddenWhenUserDoesNotOwnTask() throws Exception {
+        UUID taskId = UUID.randomUUID();
+        jobAnalysisTaskRepository.save(new JobAnalysisTask(
+                taskId,
+                "demo-user",
+                "Spring Boot FastAPI RAG 项目",
+                "需要 Java、Spring Boot、FastAPI、RAG",
+                95,
+                "{\"match_score\":95,\"matched_skills\":[\"Spring Boot\"]}",
+                Instant.now()
+        ));
+
+        mockMvc.perform(delete("/api/job-agent/tasks/{taskId}", taskId)
+                        .param("userId", "other-user"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("无权访问该求职分析记录: " + taskId));
+
+        assertThat(jobAnalysisTaskRepository.findById(taskId)).isPresent();
     }
 }
