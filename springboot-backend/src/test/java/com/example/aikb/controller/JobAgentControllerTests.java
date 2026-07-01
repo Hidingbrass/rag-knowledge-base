@@ -143,4 +143,50 @@ class JobAgentControllerTests {
                 .andExpect(jsonPath("$.data[0].matchScore").value(95))
                 .andExpect(jsonPath("$.data[0].resultJson").value("{\"match_score\":95,\"matched_skills\":[\"Spring Boot\"]}"));
     }
+
+    @Test
+    void getTaskShouldReturnJobAnalysisDetail() throws Exception {
+        UUID taskId = UUID.randomUUID();
+        jobAnalysisTaskRepository.save(new JobAnalysisTask(
+                taskId,
+                "demo-user",
+                "Spring Boot FastAPI RAG 项目",
+                "需要 Java、Spring Boot、FastAPI、RAG",
+                95,
+                "{\"match_score\":95,\"matched_skills\":[\"Spring Boot\"]}",
+                Instant.now()
+        ));
+
+        mockMvc.perform(get("/api/job-agent/tasks/{taskId}", taskId)
+                        .param("userId", "demo-user"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.message").value("ok"))
+                .andExpect(jsonPath("$.data.id").value(taskId.toString()))
+                .andExpect(jsonPath("$.data.userId").value("demo-user"))
+                .andExpect(jsonPath("$.data.resumeText").value("Spring Boot FastAPI RAG 项目"))
+                .andExpect(jsonPath("$.data.jobDescription").value("需要 Java、Spring Boot、FastAPI、RAG"))
+                .andExpect(jsonPath("$.data.matchScore").value(95))
+                .andExpect(jsonPath("$.data.resultJson").value("{\"match_score\":95,\"matched_skills\":[\"Spring Boot\"]}"));
+    }
+
+    @Test
+    void getTaskShouldReturnForbiddenWhenUserDoesNotOwnTask() throws Exception {
+        UUID taskId = UUID.randomUUID();
+        jobAnalysisTaskRepository.save(new JobAnalysisTask(
+                taskId,
+                "demo-user",
+                "Spring Boot FastAPI RAG 项目",
+                "需要 Java、Spring Boot、FastAPI、RAG",
+                95,
+                "{\"match_score\":95,\"matched_skills\":[\"Spring Boot\"]}",
+                Instant.now()
+        ));
+
+        mockMvc.perform(get("/api/job-agent/tasks/{taskId}", taskId)
+                        .param("userId", "other-user"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("无权访问该求职分析记录: " + taskId));
+    }
 }

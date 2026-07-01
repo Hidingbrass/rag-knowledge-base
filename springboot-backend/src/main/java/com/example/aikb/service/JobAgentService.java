@@ -6,6 +6,7 @@ import com.example.aikb.dto.job.JobAnalysisTaskResponse;
 import com.example.aikb.dto.job.JobAnalyzeRequest;
 import com.example.aikb.entity.JobAnalysisTask;
 import com.example.aikb.exception.BusinessException;
+import com.example.aikb.exception.ForbiddenException;
 import com.example.aikb.repository.JobAnalysisTaskRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -21,7 +22,8 @@ import java.util.UUID;
  * Service 层负责业务编排：
  * - 接收 Spring Boot 入口 DTO；
  * - 调用 FastAPI AI 服务；
- * - 后续可以在这里保存求职分析任务、记录耗时或做权限校验。
+ * - 保存求职分析任务；
+ * - 查询历史记录并校验详情访问权限。
  */
 @Service
 public class JobAgentService {
@@ -67,18 +69,33 @@ public class JobAgentService {
         }
     }
 
+    private JobAnalysisTaskResponse toResponse(JobAnalysisTask task) {
+        return new JobAnalysisTaskResponse(
+                task.id(),
+                task.userId(),
+                task.resumeText(),
+                task.jobDescription(),
+                task.matchScore(),
+                task.resultJson(),
+                task.createdAt()
+        );
+    }
+
     public List<JobAnalysisTaskResponse> listTasks(String userId) {
         List<JobAnalysisTask> tasks = jobAnalysisTaskRepository.findByUserIdOrderByCreatedAtDesc(userId);
-        return tasks.stream()
-                .map(task -> new JobAnalysisTaskResponse(
-                        task.id(),
-                        task.userId(),
-                        task.resumeText(),
-                        task.jobDescription(),
-                        task.matchScore(),
-                        task.resultJson(),
-                        task.createdAt()
-                ))
+        return tasks
+                .stream()
+                .map(this::toResponse)
                 .toList();
+    }
+
+    public JobAnalysisTaskResponse getTask(UUID taskId, String userId) {
+        JobAnalysisTask task = jobAnalysisTaskRepository.findById(taskId)
+                .orElseThrow(() -> new BusinessException("求职分析记录不存在: " + taskId));
+        if (!task.userId().equals(userId)) {
+            throw new ForbiddenException("无权访问该求职分析记录: " + taskId);
+        }
+
+        return toResponse(task);
     }
 }
