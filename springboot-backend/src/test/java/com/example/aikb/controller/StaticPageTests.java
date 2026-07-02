@@ -35,9 +35,13 @@ class StaticPageTests {
                 .andExpect(content().string(containsString("<meta charset=\"UTF-8\">")))
                 .andExpect(content().string(containsString("https://unpkg.com/vue@3")))
                 .andExpect(content().string(containsString("createApp")))
+                .andExpect(content().string(containsString("__aikbApp")))
                 .andExpect(content().string(containsString("debug.html")))
                 .andExpect(content().string(containsString("activeTab")))
                 .andExpect(content().string(containsString("loadInitialData")))
+                .andExpect(content().string(containsString("normalizedJobResult")))
+                .andExpect(content().string(containsString("job-result-grid")))
+                .andExpect(content().string(containsString("normalizeJobResult")))
                 .andExpect(content().string(containsString("viewJobTask")))
                 .andExpect(content().string(containsString("deleteJobTask")))
                 .andExpect(content().string(containsString("method: \"DELETE\"")));

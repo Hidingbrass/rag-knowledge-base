@@ -417,10 +417,133 @@
             font-size: 12px;
         }
 
-        .job-result {
+        .job-result-empty {
             min-height: 260px;
-            max-height: 460px;
+            display: grid;
+            place-items: center;
+            border: 1px dashed var(--line-strong);
+            border-radius: 8px;
+            color: var(--muted);
+            text-align: center;
+            line-height: 1.7;
+        }
+
+        .job-score-row {
+            display: grid;
+            grid-template-columns: 128px minmax(0, 1fr);
+            gap: 14px;
+            align-items: stretch;
+            margin-bottom: 14px;
+        }
+
+        .job-score {
+            display: grid;
+            place-items: center;
+            min-height: 112px;
+            border-radius: 8px;
+            background: var(--green-soft);
+            color: var(--green);
+            text-align: center;
+        }
+
+        .job-score strong {
+            display: block;
+            font-size: 34px;
+            line-height: 1;
+        }
+
+        .job-score span {
+            display: block;
+            margin-top: 7px;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .job-skills {
+            min-width: 0;
+            padding: 12px;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: #f8fafc;
+        }
+
+        .job-skills-title {
+            margin-bottom: 8px;
+            color: #475467;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 7px;
+        }
+
+        .chip {
+            display: inline-flex;
+            align-items: center;
+            min-height: 26px;
+            padding: 0 9px;
+            border-radius: 999px;
+            background: var(--blue-soft);
+            color: #1d4ed8;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .chip.missing {
+            background: var(--amber-soft);
+            color: var(--amber);
+        }
+
+        .job-result-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+            gap: 12px;
+        }
+
+        .job-section {
+            min-width: 0;
+            padding: 12px;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: #ffffff;
+        }
+
+        .job-section h4 {
+            margin: 0 0 8px;
+            color: #344054;
+            font-size: 13px;
+        }
+
+        .job-section ul {
+            margin: 0;
+            padding-left: 18px;
+            color: #475467;
+            line-height: 1.7;
+            font-size: 13px;
+        }
+
+        .job-section li + li {
+            margin-top: 4px;
+        }
+
+        .job-raw {
+            margin-top: 12px;
+        }
+
+        .job-raw summary {
+            cursor: pointer;
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .job-raw pre {
+            max-height: 260px;
             overflow: auto;
+            margin: 8px 0 0;
             padding: 12px;
             border-radius: 8px;
             background: #111827;
@@ -530,6 +653,8 @@
             .grid-2,
             .grid-3,
             .chat-layout,
+            .job-score-row,
+            .job-result-grid,
             .aside {
                 grid-template-columns: 1fr;
             }
@@ -903,10 +1028,73 @@
                 <div class="card">
                     <div class="card-header">
                         <h3 class="card-title">分析结果</h3>
-                        <span class="badge green" v-if="jobResult && jobResult.match_score != null">{{ jobResult.match_score }}</span>
+                        <span class="badge green" v-if="normalizedJobResult">{{ normalizedJobResult.matchScore }}</span>
                     </div>
                     <div class="card-body">
-                        <div class="job-result">{{ jobResultText }}</div>
+                        <div v-if="normalizedJobResult">
+                            <div class="job-score-row">
+                                <div class="job-score">
+                                    <div>
+                                        <strong>{{ normalizedJobResult.matchScore }}</strong>
+                                        <span>匹配分</span>
+                                    </div>
+                                </div>
+                                <div class="job-skills">
+                                    <div class="job-skills-title">匹配技能</div>
+                                    <div class="chips">
+                                        <span class="chip" v-for="(skill, index) in normalizedJobResult.matchedSkills" :key="`matched-${index}-${skill}`">{{ skill }}</span>
+                                        <span class="chip" v-if="normalizedJobResult.matchedSkills.length === 0">暂无</span>
+                                    </div>
+                                    <div class="job-skills-title" style="margin-top: 12px;">缺失技能</div>
+                                    <div class="chips">
+                                        <span class="chip missing" v-for="(skill, index) in normalizedJobResult.missingSkills" :key="`missing-${index}-${skill}`">{{ skill }}</span>
+                                        <span class="chip missing" v-if="normalizedJobResult.missingSkills.length === 0">暂无明显缺失</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="job-result-grid">
+                                <div class="job-section">
+                                    <h4>优势</h4>
+                                    <ul>
+                                        <li v-for="(item, index) in normalizedJobResult.strengths" :key="`strength-${index}-${item}`">{{ item }}</li>
+                                        <li v-if="normalizedJobResult.strengths.length === 0">暂无</li>
+                                    </ul>
+                                </div>
+                                <div class="job-section">
+                                    <h4>风险</h4>
+                                    <ul>
+                                        <li v-for="(item, index) in normalizedJobResult.risks" :key="`risk-${index}-${item}`">{{ item }}</li>
+                                        <li v-if="normalizedJobResult.risks.length === 0">暂无</li>
+                                    </ul>
+                                </div>
+                                <div class="job-section">
+                                    <h4>建议</h4>
+                                    <ul>
+                                        <li v-for="(item, index) in normalizedJobResult.suggestions" :key="`suggestion-${index}-${item}`">{{ item }}</li>
+                                        <li v-if="normalizedJobResult.suggestions.length === 0">暂无</li>
+                                    </ul>
+                                </div>
+                                <div class="job-section">
+                                    <h4>面试题</h4>
+                                    <ul>
+                                        <li v-for="(item, index) in normalizedJobResult.interviewQuestions" :key="`question-${index}-${item}`">{{ item }}</li>
+                                        <li v-if="normalizedJobResult.interviewQuestions.length === 0">暂无</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <details class="job-raw">
+                                <summary>查看原始 JSON</summary>
+                                <pre>{{ jobResultText }}</pre>
+                            </details>
+                        </div>
+                        <div class="job-result-empty" v-else>
+                            <div>
+                                暂无求职分析结果<br>
+                                点击“分析并保存”，或从历史记录中查看详情。
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -993,7 +1181,7 @@
 <script>
 const {createApp} = Vue;
 
-createApp({
+window.__aikbApp = createApp({
     data() {
         return {
             activeTab: "overview",
@@ -1051,6 +1239,9 @@ createApp({
         },
         rawResponse() {
             return this.lastResponse ? JSON.stringify(this.lastResponse, null, 2) : "暂无接口响应";
+        },
+        normalizedJobResult() {
+            return this.normalizeJobResult(this.jobResult);
         },
         jobResultText() {
             return this.jobResult ? JSON.stringify(this.jobResult, null, 2) : "暂无求职分析结果";
@@ -1329,6 +1520,36 @@ createApp({
         formatDate(value) {
             if (!value) return "-";
             return String(value).replace("T", " ").replace("Z", "");
+        },
+        normalizeJobResult(value) {
+            if (!value) {
+                return null;
+            }
+
+            let source = value;
+            if (value.resultJson) {
+                try {
+                    source = JSON.parse(value.resultJson);
+                } catch (error) {
+                    source = {};
+                }
+            }
+
+            const matchScore = source.match_score ?? source.matchScore ?? value.matchScore ?? "-";
+            return {
+                matchScore,
+                matchedSkills: this.toList(source.matched_skills ?? source.matchedSkills),
+                missingSkills: this.toList(source.missing_skills ?? source.missingSkills),
+                strengths: this.toList(source.strengths),
+                risks: this.toList(source.risks),
+                suggestions: this.toList(source.suggestions),
+                interviewQuestions: this.toList(source.interview_questions ?? source.interviewQuestions)
+            };
+        },
+        toList(value) {
+            return Array.isArray(value)
+                ? value.filter(item => item !== null && item !== undefined && String(item).trim() !== "")
+                : [];
         },
         summarizeSources(sourcesJson) {
             try {

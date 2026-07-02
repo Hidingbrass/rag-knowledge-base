@@ -453,7 +453,7 @@ Qdrant 检查: http://127.0.0.1:8000/qdrant/health
 
 - 继续整理 README、简历材料和面试讲解，统一成“Spring Boot + FastAPI 企业知识库 + 求职辅助 Agent”项目口径。
 - 补充 GitHub 提交前检查清单，确认 `.env`、构建产物和本地数据不会提交。
-- 继续增强求职辅助 Agent：简历结构化解析、JD 结构化解析、分析结果分区展示和更完整的前端展示。
+- 继续增强求职辅助 Agent：简历结构化解析、JD 结构化解析、简历优化建议和面试准备包。
 
 ## 最终验证清单
 
@@ -499,10 +499,11 @@ python -m app.evaluation.evaluate_rerank_params
 - 已新增 `GET /api/job-agent/tasks/{taskId}?userId=demo-user` 查询单条求职分析详情，并通过 userId 校验防止越权访问。
 - 已新增 `DELETE /api/job-agent/tasks/{taskId}?userId=demo-user` 删除单条求职分析记录，并通过 userId 校验防止越权删除。
 - 前端已重构为 Vue3 企业知识库工作台，覆盖知识库、文档、RAG 问答、求职 Agent 和状态侧栏。
+- 求职 Agent 分析结果已从原始 JSON 改为分区展示，包含匹配分、匹配技能、缺失技能、优势、风险、建议和面试题。
 - 原始联调页已保留为 `/debug.html`，仍可用于接口排查和教学演示。
 
 ## 后续任务流程
 
 1. GitHub 提交前检查：确认密钥、构建产物、本地数据库数据不会提交。
 2. 项目展示材料整理：统一 README、简历材料、面试讲解和演示脚本。
-3. 求职辅助 Agent 增强：补充简历/JD 结构化解析、分析结果分区展示和更细的面试准备建议。
+3. 求职辅助 Agent 增强：补充简历/JD 结构化解析、简历优化建议和更细的面试准备建议。
