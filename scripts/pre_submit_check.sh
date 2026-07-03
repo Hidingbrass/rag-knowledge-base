@@ -14,7 +14,7 @@ fi
 
 echo "==> Checking ignored local files"
 git check-ignore -q .env
-git check-ignore -q .venv
+git check-ignore -q .venv/
 git check-ignore -q .DS_Store
 
 echo "==> Checking tracked secret-like values"
