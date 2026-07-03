@@ -149,6 +149,7 @@ bash scripts/smoke_check.sh
 README.md：项目入口、架构图、功能列表、启动方式和 CI 徽章
 docs/showcase_acceptance_checklist.md：项目展示验收清单
 docs/final_demo_script.md：最终面试演示脚本
+docs/architecture_decisions.md：架构决策记录
 docs/interview_full_project_qa.md：完整项目高频面试问答
 docs/resume_full_project.md：完整项目简历材料
 docs/startup_guide.md：启动与部署说明
@@ -158,7 +159,7 @@ docs/pre_submit_checklist.md：提交前检查清单
 这些文档分别解决：
 
 ```text
-给面试官看：README、展示验收清单、演示脚本
+给面试官看：README、展示验收清单、演示脚本、架构决策记录
 给自己练习：高频面试问答、简历材料
 给环境复现：启动说明、新电脑迁移指南、提交前检查清单
 ```

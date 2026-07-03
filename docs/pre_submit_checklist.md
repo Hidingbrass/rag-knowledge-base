@@ -150,6 +150,7 @@ bash scripts/demo_job_agent.sh
 README.md
 docs/startup_guide.md
 docs/job_agent_design.md
+docs/architecture_decisions.md
 docs/resume_full_project.md
 docs/final_demo_script.md
 docs/showcase_acceptance_checklist.md
