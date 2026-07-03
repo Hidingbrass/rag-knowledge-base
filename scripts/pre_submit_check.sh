@@ -4,6 +4,14 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
+if [ -x "$ROOT_DIR/.venv/bin/python" ]; then
+  PYTHON_BIN="$ROOT_DIR/.venv/bin/python"
+elif command -v python3 >/dev/null 2>&1; then
+  PYTHON_BIN="python3"
+else
+  PYTHON_BIN="python"
+fi
+
 echo "==> Checking ignored local files"
 git check-ignore -q .env
 git check-ignore -q .venv
@@ -18,15 +26,14 @@ fi
 echo "==> Checking whitespace"
 git diff --check
 
+echo "==> Checking Markdown links"
+"$PYTHON_BIN" scripts/check_markdown_links.py
+
 echo "==> Checking Docker Compose config"
 docker compose config --quiet
 
 echo "==> Running FastAPI tests"
-if [ -x "$ROOT_DIR/.venv/bin/python" ]; then
-  "$ROOT_DIR/.venv/bin/python" -m pytest -q
-else
-  python -m pytest -q
-fi
+"$PYTHON_BIN" -m pytest -q
 
 echo "==> Running Spring Boot tests"
 (

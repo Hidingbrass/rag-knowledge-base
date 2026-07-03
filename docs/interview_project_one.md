@@ -178,14 +178,14 @@ RAG 不是只要回答出来就行。知识库没有资料时，如果模型强�
 自动化测试：
 
 ```text
-pytest 全量回归：72 passed。
+FastAPI pytest：96 passed。
 ```
 
-无 Rerank 检索基线：
+无 Rerank 检索历史基线：
 
 ```text
-Hit@3 = 0.8182
-检索拒答准确率 = 0.625
+Hit@3 = 0.8571
+检索拒答准确率 = 0.5
 ```
 
 历史 Rerank 生成结果：
@@ -282,7 +282,7 @@ Hybrid 会带来更多候选，也可能引入关键词噪声。所以我没有�
 回答：
 
 ```text
-FastAPI 作为 AI 服务，负责文档解析、Embedding、向量库、检索、Rerank 和模型调用。Spring Boot 负责用户、权限、知识库、文档状态、聊天记录、MySQL 和 Redis。两边通过 HTTP 接口通信。这样 Java 负责业务系统，Python 负责 AI 能力，边界比较清晰。
+FastAPI 作为 AI 服务，负责文档解析、Embedding、向量库、检索、Rerank 和模型调用。Spring Boot 负责用户、权限、知识库、文档状态、聊天记录、MySQL 持久化和统一业务接口。两边通过 HTTP 接口通信。这样 Java 负责业务系统，Python 负责 AI 能力，边界比较清晰。
 ```
 
 ### Q10：你觉得项目还有哪些不足？
@@ -290,11 +290,11 @@ FastAPI 作为 AI 服务，负责文档解析、Embedding、向量库、检索�
 回答：
 
 ```text
-目前评测集规模还比较小，主要用于学习和回归验证；Chunk 支持率仍然带有关键词规则的简化判断；还没有接入真实多用户权限和异步任务队列。下一步会把它接到 Spring Boot 企业知识库项目里，补上用户权限、文档状态、异步解析、SSE 流式输出和调用日志。
+目前评测集规模还比较小，主要用于学习和回归验证；Chunk 支持率仍然带有关键词规则的简化判断；权限使用 userId 和 department 模拟，还没有接入真实登录认证和异步任务队列。下一步可以补 Spring Security/JWT、异步解析、SSE 流式输出、调用日志和监控告警。
 ```
 
 ## 7. 自我介绍中可以怎么带出来
 
 ```text
-我最近主要做了一个 FastAPI + Qdrant 的 RAG 知识库项目。这个项目里我没有直接套框架，而是从 PDF 解析、Chunk 切分、Embedding 入库、向量检索、Rerank、Prompt 构建、引用来源和拒答评测一步步实现。后面我还把项目做了工程化拆分，补了配置、日志、异常、Docker 和 pytest 测试。通过这个项目，我对 RAG 的召回、重排、拒答和评测闭环有了比较完整的理解。
+我最近主要做了一个 Spring Boot + FastAPI 的企业知识库 RAG 项目。这个项目里我没有直接套框架，而是从 PDF 解析、Chunk 切分、Embedding 入库、向量检索、Rerank、Prompt 构建、引用来源和拒答评测一步步实现。后面我又接入 Spring Boot、MySQL、权限、会话持久化和求职辅助 Agent，并补了 Docker Compose、pytest 和 JUnit 测试。通过这个项目，我对 RAG 的召回、重排、拒答、评测和业务系统集成有了比较完整的理解。
 ```

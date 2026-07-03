@@ -8,7 +8,9 @@
 bash scripts/pre_submit_check.sh
 ```
 
-脚本会依次检查本地忽略规则、疑似密钥、空白问题、Docker Compose 配置、FastAPI 测试和 Spring Boot 测试。下面的分项说明用于你想手动排查时参考。
+脚本会依次检查本地忽略规则、疑似密钥、空白问题、Markdown 本地链接、Docker Compose 配置、FastAPI 测试和 Spring Boot 测试。下面的分项说明用于你想手动排查时参考。
+
+推送到 GitHub 后，`.github/workflows/ci.yml` 也会运行同一套提交前检查。CI 会先根据 `.env.example` 创建临时 `.env`，再执行 `bash scripts/pre_submit_check.sh`。
 
 ## 1. 密钥和本地数据
 
@@ -76,6 +78,18 @@ Spring Boot 测试使用 H2 和 MockBean，不依赖本地 MySQL、Qdrant 或真
 
 ## 4. Docker Compose 配置检查
 
+## 4. Markdown 链接检查
+
+在项目根目录执行：
+
+```bash
+python3 scripts/check_markdown_links.py
+```
+
+它会检查 `README.md` 和 `docs/` 下 Markdown 文件里的本地相对链接是否存在，避免提交后 GitHub 文档入口打不开。
+
+## 5. Docker Compose 配置检查
+
 在项目根目录执行：
 
 ```bash
@@ -91,7 +105,7 @@ docker compose config 会读取 .env。
 
 如果命令无输出且退出码为 0，说明 Compose 文件语法和变量解析通过。
 
-## 5. 本地演示检查
+## 6. 本地演示检查
 
 开发模式至少检查：
 
@@ -128,7 +142,7 @@ bash scripts/demo_job_agent.sh
 
 这一步会调用真实 AI 服务，适合在 `.env` 已配置真实 `DASHSCOPE_API_KEY` 且 Spring Boot / FastAPI 都启动后执行。
 
-## 6. 文档同步检查
+## 7. 文档同步检查
 
 这些文档需要和当前功能保持一致：
 
@@ -138,6 +152,8 @@ docs/startup_guide.md
 docs/job_agent_design.md
 docs/resume_full_project.md
 docs/final_demo_script.md
+docs/showcase_acceptance_checklist.md
+docs/interview_full_project_qa.md
 docs/pre_submit_checklist.md
 ```
 
@@ -150,7 +166,7 @@ resume_full_project 简历材料
 final_demo_script 演示流程
 ```
 
-## 7. 推荐提交顺序
+## 8. 推荐提交顺序
 
 提交前先查看变更：
 
@@ -173,7 +189,7 @@ test: cover job agent generated task history
 feat: polish job agent showcase workflow
 ```
 
-## 8. 面试展示前最后确认
+## 9. 面试展示前最后确认
 
 演示前确认：
 

@@ -47,7 +47,7 @@ Python, FastAPI, Pydantic, Qdrant, DashScope, 通义千问 Embedding/Chat, qwen3
 当前自动化测试：
 
 ```text
-pytest 全量回归：72 passed。
+FastAPI pytest：96 passed。
 ```
 
 历史 Rerank 优化效果：
@@ -63,8 +63,8 @@ pytest 全量回归：72 passed。
 
 | 指标 | 结果 |
 |---|---:|
-| Hit@3 | 0.8182 |
-| 检索拒答准确率 | 0.625 |
+| Hit@3 | 0.8571 |
+| 检索拒答准确率 | 0.5 |
 
 Rerank 阈值实验结论：
 

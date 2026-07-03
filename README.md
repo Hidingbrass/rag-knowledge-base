@@ -1,5 +1,7 @@
 # RAG Knowledge Base
 
+[![CI](https://github.com/Hidingbrass/rag-knowledge-base/actions/workflows/ci.yml/badge.svg)](https://github.com/Hidingbrass/rag-knowledge-base/actions/workflows/ci.yml)
+
 一个基于 Spring Boot、FastAPI、Qdrant、MySQL 和通义千问的企业知识库 RAG 学习项目。项目从底层实现 PDF 解析、文本切分、Embedding 入库、向量检索、RAG 问答、引用来源、拒答、Rerank、质量评测、知识库权限、聊天会话、求职辅助 Agent 和前端演示页，用于理解企业知识库问答系统与 AI 业务应用的核心链路。
 
 当前项目重点不是直接使用 LangChain 等框架完成黑盒调用，而是手动拆解 RAG 的关键步骤，并用 Spring Boot 承载业务层、MySQL 保存业务数据、FastAPI 承载 AI 服务，建立可评测、可对比、可解释的优化闭环。
@@ -12,10 +14,42 @@
 - [完整项目简历材料](docs/resume_full_project.md)
 - [求职辅助 Agent 设计说明](docs/job_agent_design.md)
 - [项目一面试讲解手册](docs/interview_project_one.md)
+- [完整项目高频面试问答](docs/interview_full_project_qa.md)
+- [项目展示验收清单](docs/showcase_acceptance_checklist.md)
 - [一周完整项目冲刺计划](docs/one_week_full_project_plan.md)
 - [RAG + Rerank 实验报告](docs/rag_rerank_experiment_report.md)
 - [启动与部署说明](docs/startup_guide.md)
 - [新电脑恢复项目指南](docs/new_machine_migration.md)
+
+## 项目亮点
+
+这个项目适合在简历中突出三类能力：
+
+| 方向 | 体现 |
+| --- | --- |
+| AI 应用落地 | 手动实现 PDF 解析、Chunk 切分、Embedding、Qdrant 检索、Rerank、拒答、引用来源和评测 |
+| 后端工程能力 | Spring Boot 分层、MySQL 持久化、权限校验、文档状态流转、会话消息、异常处理和测试 |
+| 产品扩展能力 | 在同一套 Spring Boot + FastAPI 架构上扩展求职辅助 Agent、历史记录、简历版本、岗位收藏和对比决策 |
+
+核心架构：
+
+```mermaid
+flowchart LR
+    Browser["Vue3 企业工作台 / debug.html"] --> Backend["Spring Boot 业务后端"]
+    Backend --> MySQL[("MySQL\n知识库 / 文档 / 会话 / 求职历史")]
+    Backend --> FastAPI["FastAPI AI 服务"]
+    FastAPI --> Qdrant[("Qdrant\n文本 Chunk 向量")]
+    FastAPI --> DashScope["DashScope\nEmbedding / Rerank / Chat"]
+```
+
+业务和 AI 的职责边界：
+
+| 层 | 负责什么 | 不负责什么 |
+| --- | --- | --- |
+| Spring Boot | 用户入口、权限、业务状态、MySQL 持久化、调用 FastAPI | 不直接拼 Prompt、不直接操作向量检索细节 |
+| FastAPI | PDF 解析、文本切分、Embedding、RAG、Rerank、求职 Agent Prompt 和 JSON 解析 | 不保存业务归属关系、不决定用户是否有权限 |
+| MySQL | 知识库、文档状态、聊天会话、聊天消息、求职分析和生成历史 | 不存储高维向量 |
+| Qdrant | 保存和检索文本 Chunk 向量 | 不保存业务权限和会话关系 |
 
 ## 技术栈
 
@@ -449,6 +483,8 @@ app/
 面试展示和提交检查见：
 
 - [最终面试演示脚本](docs/final_demo_script.md)
+- [项目展示验收清单](docs/showcase_acceptance_checklist.md)
+- [完整项目高频面试问答](docs/interview_full_project_qa.md)
 - [GitHub 提交前检查清单](docs/pre_submit_checklist.md)
 - [完整项目简历材料](docs/resume_full_project.md)
 - 命令行求职 Agent 演示：`bash scripts/demo_job_agent.sh`
@@ -500,6 +536,7 @@ bash scripts/demo_job_agent.sh
 ## 后续计划
 
 - 按 [最终面试演示脚本](docs/final_demo_script.md) 做一次完整本地演示，确认讲解顺序自然。
+- 按 [项目展示验收清单](docs/showcase_acceptance_checklist.md) 收集页面、接口、测试和 Docker 运行证据。
 - 按 [GitHub 提交前检查清单](docs/pre_submit_checklist.md) 做提交前检查，确认 `.env`、构建产物和本地数据不会提交。
 - 继续打磨 GitHub README 截图、演示数据和项目讲解口径。
 

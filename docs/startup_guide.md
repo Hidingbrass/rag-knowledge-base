@@ -221,6 +221,7 @@ Qdrant 检查: http://127.0.0.1:8000/qdrant/health
 
 ```text
 docs/final_demo_script.md       最终面试演示脚本
+docs/showcase_acceptance_checklist.md  项目展示验收清单
 docs/pre_submit_checklist.md    GitHub 提交前检查清单
 ```
 
