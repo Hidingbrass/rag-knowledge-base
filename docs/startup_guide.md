@@ -224,6 +224,14 @@ docs/final_demo_script.md       最终面试演示脚本
 docs/pre_submit_checklist.md    GitHub 提交前检查清单
 ```
 
+也可以用命令行快速演示求职 Agent：
+
+```bash
+bash scripts/demo_job_agent.sh
+```
+
+这个脚本会调用 Spring Boot 的求职 Agent 接口，并把结果写入 MySQL 历史。它会调用真实 FastAPI 和 DashScope，因此需要确认 `.env` 里的 `DASHSCOPE_API_KEY` 可用。
+
 容器内部通信地址：
 
 ```text

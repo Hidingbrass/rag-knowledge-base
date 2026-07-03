@@ -120,6 +120,14 @@ docker compose logs -f backend
 求职 Agent 页面可以看到简历解析、JD 解析、分析、优化、面试准备、STAR 答案、历史、对比和导出入口
 ```
 
+命令行演示可以运行：
+
+```bash
+bash scripts/demo_job_agent.sh
+```
+
+这一步会调用真实 AI 服务，适合在 `.env` 已配置真实 `DASHSCOPE_API_KEY` 且 Spring Boot / FastAPI 都启动后执行。
+
 ## 6. 文档同步检查
 
 这些文档需要和当前功能保持一致：

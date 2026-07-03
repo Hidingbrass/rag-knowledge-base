@@ -451,6 +451,7 @@ app/
 - [最终面试演示脚本](docs/final_demo_script.md)
 - [GitHub 提交前检查清单](docs/pre_submit_checklist.md)
 - [完整项目简历材料](docs/resume_full_project.md)
+- 命令行求职 Agent 演示：`bash scripts/demo_job_agent.sh`
 
 推荐开发启动，本地代码更方便调试：
 
@@ -487,6 +488,14 @@ FastAPI Swagger: http://127.0.0.1:8000/docs
 FastAPI 健康检查: http://127.0.0.1:8000/health
 Qdrant 检查: http://127.0.0.1:8000/qdrant/health
 ```
+
+Spring Boot、FastAPI 和 DashScope Key 都可用后，也可以用命令行快速跑一遍求职 Agent 演示：
+
+```bash
+bash scripts/demo_job_agent.sh
+```
+
+脚本会依次调用健康检查、简历版本、岗位收藏、求职分析、简历优化、面试准备、STAR 答案和历史查询接口。
 
 ## 后续计划
 
