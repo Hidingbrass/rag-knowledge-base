@@ -55,6 +55,7 @@ bash scripts/pre_submit_check.sh
 ```bash
 docker compose up --build -d
 docker compose ps
+bash scripts/smoke_check.sh
 ```
 
 检查服务：
@@ -79,6 +80,8 @@ bash scripts/demo_job_agent.sh
 ```
 
 注意：求职 Agent 演示脚本会调用真实 FastAPI 和 DashScope，并把演示数据写入 MySQL。
+
+`scripts/smoke_check.sh` 只做服务可用性检查，不调用 DashScope，也不写入演示数据。
 
 ## 4. 推荐截图清单
 

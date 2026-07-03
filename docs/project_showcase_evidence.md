@@ -98,6 +98,14 @@ bash scripts/demo_job_agent.sh
 
 注意：命令行求职 Agent 演示会调用真实 FastAPI 和 DashScope，并把结果写入 MySQL。
 
+服务启动后的快速冒烟检查：
+
+```bash
+bash scripts/smoke_check.sh
+```
+
+这个脚本只检查 Spring Boot、FastAPI、Qdrant、Vue3 工作台和 debug 页是否可访问，不调用 DashScope，也不写入 demo 数据。
+
 ## 4. 运行和复现证据
 
 推荐开发启动方式：
@@ -125,6 +133,12 @@ Spring Boot 健康检查: http://127.0.0.1:8080/api/health
 FastAPI Swagger: http://127.0.0.1:8000/docs
 FastAPI 健康检查: http://127.0.0.1:8000/health
 Qdrant 检查: http://127.0.0.1:8000/qdrant/health
+```
+
+也可以直接执行：
+
+```bash
+bash scripts/smoke_check.sh
 ```
 
 ## 5. 文档证据

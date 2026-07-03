@@ -535,6 +535,14 @@ bash scripts/demo_job_agent.sh
 
 脚本会依次调用健康检查、简历版本、岗位收藏、求职分析、简历优化、面试准备、STAR 答案和历史查询接口。
 
+如果只想确认本地服务已经启动，不调用真实模型 API，可以运行：
+
+```bash
+bash scripts/smoke_check.sh
+```
+
+这个脚本会检查 Spring Boot、FastAPI、Qdrant、Vue3 工作台和 debug 页是否可访问。
+
 ## 后续计划
 
 - 按 [最终面试演示脚本](docs/final_demo_script.md) 做一次完整本地演示，确认讲解顺序自然。
@@ -549,6 +557,12 @@ bash scripts/demo_job_agent.sh
 
 ```bash
 bash scripts/pre_submit_check.sh
+```
+
+服务启动后的快速冒烟检查：
+
+```bash
+bash scripts/smoke_check.sh
 ```
 
 也可以分开执行：

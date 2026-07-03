@@ -233,6 +233,14 @@ bash scripts/demo_job_agent.sh
 
 这个脚本会调用 Spring Boot 的求职 Agent 接口，并把结果写入 MySQL 历史。它会调用真实 FastAPI 和 DashScope，因此需要确认 `.env` 里的 `DASHSCOPE_API_KEY` 可用。
 
+如果只想确认完整系统已经启动，不想调用真实模型 API，可以运行：
+
+```bash
+bash scripts/smoke_check.sh
+```
+
+它会检查 Spring Boot 健康接口、Vue3 工作台、debug 页、FastAPI 健康接口、FastAPI Swagger、FastAPI Qdrant 健康接口和 Qdrant collections。
+
 容器内部通信地址：
 
 ```text
@@ -266,6 +274,12 @@ Docker Compose 把容器内 3306 映射到宿主机 3307，可以减少端口冲
 
 ```powershell
 curl.exe http://127.0.0.1:8080/api/health
+```
+
+也可以直接运行完整 smoke check：
+
+```bash
+bash scripts/smoke_check.sh
 ```
 
 ### 5.2 检查知识库列表
