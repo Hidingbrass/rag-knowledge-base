@@ -153,6 +153,7 @@ docs/job_agent_design.md
 docs/resume_full_project.md
 docs/final_demo_script.md
 docs/showcase_acceptance_checklist.md
+docs/project_showcase_evidence.md
 docs/interview_full_project_qa.md
 docs/pre_submit_checklist.md
 ```

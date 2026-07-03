@@ -16,6 +16,7 @@
 - [项目一面试讲解手册](docs/interview_project_one.md)
 - [完整项目高频面试问答](docs/interview_full_project_qa.md)
 - [项目展示验收清单](docs/showcase_acceptance_checklist.md)
+- [项目展示证据报告](docs/project_showcase_evidence.md)
 - [一周完整项目冲刺计划](docs/one_week_full_project_plan.md)
 - [RAG + Rerank 实验报告](docs/rag_rerank_experiment_report.md)
 - [启动与部署说明](docs/startup_guide.md)
@@ -484,6 +485,7 @@ app/
 
 - [最终面试演示脚本](docs/final_demo_script.md)
 - [项目展示验收清单](docs/showcase_acceptance_checklist.md)
+- [项目展示证据报告](docs/project_showcase_evidence.md)
 - [完整项目高频面试问答](docs/interview_full_project_qa.md)
 - [GitHub 提交前检查清单](docs/pre_submit_checklist.md)
 - [完整项目简历材料](docs/resume_full_project.md)
@@ -537,6 +539,7 @@ bash scripts/demo_job_agent.sh
 
 - 按 [最终面试演示脚本](docs/final_demo_script.md) 做一次完整本地演示，确认讲解顺序自然。
 - 按 [项目展示验收清单](docs/showcase_acceptance_checklist.md) 收集页面、接口、测试和 Docker 运行证据。
+- 按 [项目展示证据报告](docs/project_showcase_evidence.md) 整理可直接展示给面试官的验证结果。
 - 按 [GitHub 提交前检查清单](docs/pre_submit_checklist.md) 做提交前检查，确认 `.env`、构建产物和本地数据不会提交。
 - 继续打磨 GitHub README 截图、演示数据和项目讲解口径。
 
