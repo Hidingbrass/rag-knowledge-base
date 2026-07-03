@@ -1,0 +1,6 @@
+target/
+maven-repo/
+.idea/
+.DS_Store
+*.iml
+*.log

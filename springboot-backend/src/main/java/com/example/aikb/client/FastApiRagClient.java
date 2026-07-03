@@ -2,10 +2,20 @@ package com.example.aikb.client;
 
 import com.example.aikb.config.FastApiProperties;
 import com.example.aikb.dto.fastapi.FastApiDocumentIndexResponse;
+import com.example.aikb.dto.fastapi.FastApiInterviewPrepRequest;
+import com.example.aikb.dto.fastapi.FastApiInterviewPrepResponse;
+import com.example.aikb.dto.fastapi.FastApiJdParseRequest;
+import com.example.aikb.dto.fastapi.FastApiJdParseResponse;
 import com.example.aikb.dto.fastapi.FastApiJobAnalyzeRequest;
 import com.example.aikb.dto.fastapi.FastApiJobAnalyzeResponse;
 import com.example.aikb.dto.fastapi.FastApiRagResponse;
 import com.example.aikb.dto.fastapi.FastApiRerankChatRequest;
+import com.example.aikb.dto.fastapi.FastApiResumeOptimizeRequest;
+import com.example.aikb.dto.fastapi.FastApiResumeOptimizeResponse;
+import com.example.aikb.dto.fastapi.FastApiResumeParseRequest;
+import com.example.aikb.dto.fastapi.FastApiResumeParseResponse;
+import com.example.aikb.dto.fastapi.FastApiStarInterviewAnswerRequest;
+import com.example.aikb.dto.fastapi.FastApiStarInterviewAnswerResponse;
 import com.example.aikb.exception.BusinessException;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.MediaType;
@@ -128,6 +138,86 @@ public class FastApiRagClient {
                     .body(FastApiJobAnalyzeResponse.class);
         } catch (RestClientException exception) {
             throw new BusinessException("调用 FastAPI 求职分析服务失败", exception);
+        }
+    }
+
+    public FastApiResumeParseResponse parseResume(String resumeText) {
+        FastApiResumeParseRequest request = new FastApiResumeParseRequest(resumeText);
+
+        try {
+            return fastApiRestClient.post()
+                    .uri("/job/resume/parse")
+                    .body(request)
+                    .retrieve()
+                    .body(FastApiResumeParseResponse.class);
+        } catch (RestClientException exception) {
+            throw new BusinessException("调用 FastAPI 简历结构化服务失败", exception);
+        }
+    }
+
+    public FastApiJdParseResponse parseJd(String jobDescription) {
+        FastApiJdParseRequest request = new FastApiJdParseRequest(jobDescription);
+
+        try {
+            return fastApiRestClient.post()
+                    .uri("/job/jd/parse")
+                    .body(request)
+                    .retrieve()
+                    .body(FastApiJdParseResponse.class);
+        } catch (RestClientException exception) {
+            throw new BusinessException("调用 FastAPI JD 结构化服务失败", exception);
+        }
+    }
+
+    public FastApiResumeOptimizeResponse optimizeResume(String resumeText, String jobDescription) {
+        FastApiResumeOptimizeRequest request = new FastApiResumeOptimizeRequest(
+                resumeText,
+                jobDescription
+        );
+
+        try {
+            return fastApiRestClient.post()
+                    .uri("/job/resume/optimize")
+                    .body(request)
+                    .retrieve()
+                    .body(FastApiResumeOptimizeResponse.class);
+        } catch (RestClientException exception) {
+            throw new BusinessException("调用 FastAPI 简历优化服务失败", exception);
+        }
+    }
+
+    public FastApiInterviewPrepResponse prepareInterview(String resumeText, String jobDescription) {
+        FastApiInterviewPrepRequest request = new FastApiInterviewPrepRequest(
+                resumeText,
+                jobDescription
+        );
+
+        try {
+            return fastApiRestClient.post()
+                    .uri("/job/interview/prepare")
+                    .body(request)
+                    .retrieve()
+                    .body(FastApiInterviewPrepResponse.class);
+        } catch (RestClientException exception) {
+            throw new BusinessException("调用 FastAPI 面试准备服务失败", exception);
+        }
+    }
+
+    public FastApiStarInterviewAnswerResponse generateStarInterviewAnswer(String resumeText, String jobDescription, String question) {
+        FastApiStarInterviewAnswerRequest request = new FastApiStarInterviewAnswerRequest(
+                resumeText,
+                jobDescription,
+                question
+        );
+
+        try {
+            return fastApiRestClient.post()
+                    .uri("/job/interview/star-answer")
+                    .body(request)
+                    .retrieve()
+                    .body(FastApiStarInterviewAnswerResponse.class);
+        } catch (RestClientException exception) {
+            throw new BusinessException("调用 FastAPI STAR 面试答案服务失败", exception);
         }
     }
 }

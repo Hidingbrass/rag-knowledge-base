@@ -103,6 +103,28 @@ Qdrant: 127.0.0.1:6333
 所以本项目把容器内的 3306 映射到宿主机的 3307，减少端口冲突。
 ```
 
+如果只是想快速验证完整系统，也可以直接一键启动全部容器：
+
+```bash
+docker compose up --build -d
+```
+
+这会同时启动：
+
+```text
+mysql   -> MySQL 业务数据库
+qdrant  -> 向量数据库
+api     -> FastAPI AI 服务
+backend -> Spring Boot 业务后端和前端页面
+```
+
+一键启动后可以直接检查：
+
+```text
+http://127.0.0.1:8080/index.html
+http://127.0.0.1:8000/docs
+```
+
 ## 5. 启动 FastAPI
 
 Windows PowerShell：
@@ -234,19 +256,28 @@ Qdrant 使用 snapshot 或服务端持久化存储恢复。
 
 ## 9. 新电脑恢复后的验证顺序
 
-按下面顺序验证，最容易定位问题：
+完整 Docker 模式按下面顺序验证：
+
+```text
+1. docker compose up --build -d
+2. 访问 http://127.0.0.1:8000/health
+3. 访问 http://127.0.0.1:8080/api/health
+4. 访问 http://127.0.0.1:8080/index.html
+5. 前端点击检查服务状态
+6. 创建知识库
+7. 上传 PDF
+8. 创建会话并提问
+```
+
+开发模式按下面顺序验证，最容易定位问题：
 
 ```text
 1. docker compose up -d mysql qdrant
 2. 访问 http://127.0.0.1:6333/collections，确认 Qdrant 正常
-3. 启动 FastAPI
+3. 本地启动 FastAPI
 4. 访问 http://127.0.0.1:8000/health
-5. 启动 Spring Boot
+5. 本地启动 Spring Boot
 6. 访问 http://127.0.0.1:8080/index.html
-7. 前端点击检查服务状态
-8. 创建知识库
-9. 上传 PDF
-10. 创建会话并提问
 ```
 
 ## 10. 面试时怎么解释

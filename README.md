@@ -58,8 +58,10 @@
 - MySQL 持久化知识库、文档状态、聊天会话和聊天消息
 - 基于 owner / department 的知识库访问控制
 - 求职辅助 Agent 支持简历与岗位 JD 匹配分析、差距建议和面试题生成
-- MySQL 持久化求职分析任务，并支持按 userId 查询历史记录
-- Vue3 工作台支持上传 PDF、创建会话、提问、查看引用来源、权限验证和求职分析演示
+- 求职辅助 Agent 支持简历结构化解析、岗位 JD 结构化解析、简历优化建议、面试准备包和 STAR 面试答案生成
+- MySQL 持久化求职分析任务、收藏岗位、简历优化历史、面试准备历史、STAR 答案历史和简历版本，并支持按 userId 查询历史记录
+- 求职辅助 Agent 支持多条求职分析历史对比，输出最佳匹配、平均分、共同匹配技能和共同缺失技能
+- Vue3 工作台支持上传 PDF、创建会话、提问、查看引用来源、权限验证、求职分析演示、简历解析、JD 解析、简历优化、面试准备、STAR 答案、生成历史、简历版本管理、岗位收藏、分析结果对比决策面板和 Markdown 报告导出
 - `/debug.html` 保留原始联调页，方便排查接口请求和响应
 
 ## 系统流程
@@ -209,9 +211,28 @@ Rerank 相比无 Rerank 的提升：
 - `GET /api/chat/sessions/{sessionId}/messages`：查看聊天消息
 - `POST /api/chat/sessions/{sessionId}/ask`：在指定会话和指定文档内提问
 - `POST /api/job-agent/analyze`：输入 userId、简历文本和岗位 JD，调用 FastAPI 求职辅助 Agent 返回匹配分析，并保存到 MySQL
+- `POST /api/job-agent/resume/parse`：输入简历文本，调用 FastAPI 提取目标岗位、技能、项目经历、优势和关键词
+- `POST /api/job-agent/jd/parse`：输入岗位 JD，调用 FastAPI 提取岗位名称、级别、必备技能、加分技能、职责、要求、关键词和风险点
+- `POST /api/job-agent/resume/optimize`：输入 userId、简历文本和岗位 JD，调用 FastAPI 生成差距总结、改写建议、缺失关键词和行动项，并保存生成历史
+- `POST /api/job-agent/interview/prepare`：输入 userId、简历文本和岗位 JD，调用 FastAPI 生成自我介绍、项目讲解、技术追问、行为问题和准备清单，并保存生成历史
+- `POST /api/job-agent/interview/star-answer`：输入 userId、简历文本、岗位 JD 和面试问题，调用 FastAPI 生成 STAR 面试答案，并保存生成历史
+- `GET /api/job-agent/generated-tasks?userId=demo-user`：按 userId 查询简历优化、面试准备和 STAR 答案生成历史
+- `GET /api/job-agent/generated-tasks?userId=demo-user&taskType=RESUME_OPTIMIZE`：按类型筛选生成历史
+- `GET /api/job-agent/generated-tasks/{taskId}?userId=demo-user`：查看生成历史详情，并校验记录归属
+- `DELETE /api/job-agent/generated-tasks/{taskId}?userId=demo-user`：删除生成历史，并校验记录归属
+- `POST /api/job-agent/resume-versions`：保存一个面向特定岗位的简历版本
+- `GET /api/job-agent/resume-versions?userId=demo-user`：按 userId 查询简历版本列表
+- `GET /api/job-agent/resume-versions/{versionId}?userId=demo-user`：查看简历版本详情，并校验记录归属
+- `PUT /api/job-agent/resume-versions/{versionId}`：覆盖更新简历版本，并校验记录归属
+- `DELETE /api/job-agent/resume-versions/{versionId}?userId=demo-user`：删除简历版本，并校验记录归属
 - `GET /api/job-agent/tasks?userId=demo-user`：按 userId 查询求职分析历史记录
+- `POST /api/job-agent/tasks/compare`：输入 userId 和 2 到 5 条求职分析 taskId，对比匹配分、共同技能和缺失技能
 - `GET /api/job-agent/tasks/{taskId}?userId=demo-user`：查看单条求职分析详情，并校验记录归属防止越权访问
 - `DELETE /api/job-agent/tasks/{taskId}?userId=demo-user`：删除单条求职分析记录，并校验记录归属防止越权访问
+- `POST /api/job-agent/favorites`：收藏岗位 JD，并保存岗位名称、公司、来源链接和备注
+- `GET /api/job-agent/favorites?userId=demo-user`：按 userId 查询收藏岗位
+- `GET /api/job-agent/favorites/{favoriteId}?userId=demo-user`：查看收藏岗位详情，并校验记录归属
+- `DELETE /api/job-agent/favorites/{favoriteId}?userId=demo-user`：删除收藏岗位，并校验记录归属
 
 ### FastAPI AI 接口
 
@@ -224,6 +245,11 @@ FastAPI 主要作为 AI 服务被 Spring Boot 调用，也可以在 Swagger 中�
 - `/rag/chat`：无 Rerank RAG 问答
 - `/rag/chat/rerank`：带 Rerank 的 RAG 问答
 - `/job/analyze`：求职辅助 Agent 简历与岗位 JD 匹配分析
+- `/job/resume/parse`：简历结构化解析
+- `/job/jd/parse`：岗位 JD 结构化解析
+- `/job/resume/optimize`：根据岗位 JD 生成简历优化建议
+- `/job/interview/prepare`：根据简历和岗位 JD 生成面试准备包
+- `/job/interview/star-answer`：根据简历、岗位 JD 和面试问题生成 STAR 面试答案
 
 旧版 Spring Boot `/api/rag/ask` 已禁用，原因是它无法校验会话权限和文档归属，正式问答入口统一使用 `/api/chat/sessions/{sessionId}/ask`。
 
@@ -303,8 +329,8 @@ tests/
 当前结果：
 
 ```text
-FastAPI pytest：72 passed
-Spring Boot Maven test：30 passed
+FastAPI pytest：96 passed
+Spring Boot Maven test：57 passed
 ```
 
 ## 项目结构
@@ -397,9 +423,9 @@ api：已拆分 health、chat、documents、search、rag、job 路由，main.py 
 core/config：已集中管理 DASHSCOPE_API_KEY、DashScope Base URL、Qdrant 地址、Collection 名称、模型名称、超时时间和 RAG/Rerank 默认参数
 core/logging：已统一配置日志输出，记录文档入库、Qdrant 检索、RAG/Rerank、fallback 和异常
 core/exceptions：已统一业务异常和兜底异常处理，api 层不再重复编写 try/except
-pytest：当前全量回归 72 passed，覆盖路由、统一异常、配置默认值、测试集结构、Qdrant source 字段、Rerank 映射、fallback、评测工具函数、CLI 参数解析、JSON 保存、求职 Agent Service 基础逻辑和求职分析路由
-Spring Boot：已接入 MySQL/JPA、知识库权限、文档状态、重复上传检测、聊天会话、消息持久化、求职 Agent 分析入口、求职分析任务持久化、历史查询、详情、删除接口、Vue3 企业工作台和联调页，当前 Maven 测试 30 passed
-Docker Compose：已新增 Dockerfile、docker-compose.yml、.dockerignore 和 .env.example，支持启动 FastAPI、Qdrant 和 MySQL
+pytest：当前全量回归 96 passed，覆盖路由、统一异常、配置默认值、测试集结构、Qdrant source 字段、Rerank 映射、fallback、评测工具函数、CLI 参数解析、JSON 保存、求职 Agent Service 基础逻辑、STAR 面试答案生成和求职分析路由
+Spring Boot：已接入 MySQL/JPA、知识库权限、文档状态、重复上传检测、聊天会话、消息持久化、求职 Agent 分析入口、求职分析任务持久化、优化/面试准备/STAR 答案生成历史、简历版本管理、历史查询、详情、删除、收藏岗位、分析结果对比、Vue3 企业工作台和联调页，当前 Maven 测试 57 passed
+Docker Compose：已新增 FastAPI / Spring Boot Dockerfile、docker-compose.yml、.dockerignore 和 .env.example，支持一键启动 MySQL、Qdrant、FastAPI 和 Spring Boot
 ```
 
 后续计划分层方向：
@@ -420,7 +446,13 @@ app/
 
 [启动与部署说明](docs/startup_guide.md)
 
-推荐开发启动：
+面试展示和提交检查见：
+
+- [最终面试演示脚本](docs/final_demo_script.md)
+- [GitHub 提交前检查清单](docs/pre_submit_checklist.md)
+- [完整项目简历材料](docs/resume_full_project.md)
+
+推荐开发启动，本地代码更方便调试：
 
 ```powershell
 Copy-Item .env.example .env
@@ -431,11 +463,18 @@ cd springboot-backend
 mvn -s maven-settings.xml spring-boot:run
 ```
 
-完整 Docker Compose 启动：
+完整 Docker Compose 一键启动：
 
 ```powershell
 Copy-Item .env.example .env
-docker compose up --build
+docker compose up --build -d
+```
+
+查看日志：
+
+```powershell
+docker compose logs -f backend
+docker compose logs -f api
 ```
 
 启动后访问：
@@ -451,13 +490,19 @@ Qdrant 检查: http://127.0.0.1:8000/qdrant/health
 
 ## 后续计划
 
-- 继续整理 README、简历材料和面试讲解，统一成“Spring Boot + FastAPI 企业知识库 + 求职辅助 Agent”项目口径。
-- 补充 GitHub 提交前检查清单，确认 `.env`、构建产物和本地数据不会提交。
-- 继续增强求职辅助 Agent：简历结构化解析、JD 结构化解析、简历优化建议和面试准备包。
+- 按 [最终面试演示脚本](docs/final_demo_script.md) 做一次完整本地演示，确认讲解顺序自然。
+- 按 [GitHub 提交前检查清单](docs/pre_submit_checklist.md) 做提交前检查，确认 `.env`、构建产物和本地数据不会提交。
+- 继续打磨 GitHub README 截图、演示数据和项目讲解口径。
 
 ## 最终验证清单
 
 本地快速回归，不调用真实模型 API：
+
+```bash
+bash scripts/pre_submit_check.sh
+```
+
+也可以分开执行：
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest
@@ -500,10 +545,20 @@ python -m app.evaluation.evaluate_rerank_params
 - 已新增 `DELETE /api/job-agent/tasks/{taskId}?userId=demo-user` 删除单条求职分析记录，并通过 userId 校验防止越权删除。
 - 前端已重构为 Vue3 企业知识库工作台，覆盖知识库、文档、RAG 问答、求职 Agent 和状态侧栏。
 - 求职 Agent 分析结果已从原始 JSON 改为分区展示，包含匹配分、匹配技能、缺失技能、优势、风险、建议和面试题。
+- 简历结构化解析已打通 FastAPI、Spring Boot 和 Vue3 前端，支持提取目标岗位、技能、项目经历、优势和关键词。
+- JD 结构化解析已打通 FastAPI、Spring Boot 和 Vue3 前端，支持提取岗位名称、级别、必备技能、加分技能、职责、要求、关键词和风险点。
+- 简历优化建议已打通 FastAPI、Spring Boot 和 Vue3 前端，支持根据岗位 JD 输出差距总结、改写建议、缺失关键词和行动项。
+- 面试准备包已打通 FastAPI、Spring Boot 和 Vue3 前端，支持生成自我介绍、项目讲解、技术追问、行为问题、反问面试官问题和准备清单。
+- STAR 面试答案生成已打通 FastAPI、Spring Boot、MySQL 和 Vue3 前端，支持根据面试问题输出 S/T/A/R 拆解、完整口述答案、突出能力和可能追问。
+- 优化建议、面试准备包和 STAR 答案生成历史已打通 Spring Boot、MySQL 和 Vue3 前端，支持按 userId 查询、查看详情和删除。
+- 岗位收藏已打通 Spring Boot、MySQL 和 Vue3 前端，支持保存、查询、使用和删除收藏 JD，并通过 userId 校验防止越权访问。
+- 分析结果对比已打通 Spring Boot 和 Vue3 前端，支持选择 2 到 5 条历史记录，以决策面板展示最佳匹配、平均分、共同技能、共同缺失、分数条、优势和风险。
+- Markdown 报告导出已打通 Vue3 前端，支持导出求职分析报告、简历优化报告、面试准备包和 STAR 面试答案。
+- 简历版本管理已打通 Spring Boot、MySQL 和 Vue3 前端，支持保存、查询、使用、覆盖更新和删除不同岗位版本。
 - 原始联调页已保留为 `/debug.html`，仍可用于接口排查和教学演示。
 
 ## 后续任务流程
 
-1. GitHub 提交前检查：确认密钥、构建产物、本地数据库数据不会提交。
-2. 项目展示材料整理：统一 README、简历材料、面试讲解和演示脚本。
-3. 求职辅助 Agent 增强：补充简历/JD 结构化解析、简历优化建议和更细的面试准备建议。
+1. 按最终演示脚本跑一遍完整流程，确认页面、数据和口述顺序没有断点。
+2. 按提交前检查清单做回归测试和 Git 状态检查。
+3. 最后补充 GitHub 截图或录屏素材，让仓库首页更适合展示。

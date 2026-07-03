@@ -6,14 +6,14 @@ Spring Boot + FastAPI 企业智能知识库 RAG 问答系统 + 求职辅助 Agen
 
 ## 一句话描述
 
-基于 Spring Boot、FastAPI、MySQL、Qdrant 和通义千问构建企业知识库问答系统，并扩展求职辅助 Agent。系统支持 PDF 文档入库、RAG 问答、Rerank 重排、引用溯源、拒答、知识库权限控制、聊天会话持久化、简历与岗位 JD 匹配分析、求职分析历史保存和前端演示。
+基于 Spring Boot、FastAPI、MySQL、Qdrant 和通义千问构建企业知识库问答系统，并扩展求职辅助 Agent。系统支持 PDF 文档入库、RAG 问答、Rerank 重排、引用溯源、拒答、知识库权限控制、聊天会话持久化、简历与岗位 JD 匹配分析、简历结构化解析、JD 结构化解析、简历优化建议、面试准备包、STAR 面试答案、简历版本管理、求职分析历史保存、生成历史保存、岗位收藏、分析结果对比决策面板、Markdown 报告导出和前端演示。
 
 ## 推荐简历写法
 
 项目描述：
 
 ```text
-基于 Spring Boot + FastAPI + MySQL + Qdrant + 通义千问实现企业知识库 RAG 问答系统，并扩展求职辅助 Agent。Spring Boot 负责知识库、文档状态、权限校验、聊天会话、聊天消息和求职分析任务持久化；FastAPI 负责 PDF 解析、Chunk 切分、Embedding、向量检索、qwen3-rerank、大模型问答和求职分析 Prompt 编排；MySQL 保存业务数据，Qdrant 保存文本片段向量。项目支持指定文档问答、引用来源、无依据拒答、重复文档检测、简历与岗位 JD 匹配分析、历史查询、前端演示和自动化评测。
+基于 Spring Boot + FastAPI + MySQL + Qdrant + 通义千问实现企业知识库 RAG 问答系统，并扩展求职辅助 Agent。Spring Boot 负责知识库、文档状态、权限校验、聊天会话、聊天消息、求职分析任务、生成历史、简历版本和收藏岗位持久化；FastAPI 负责 PDF 解析、Chunk 切分、Embedding、向量检索、qwen3-rerank、大模型问答和求职分析 Prompt 编排；MySQL 保存业务数据，Qdrant 保存文本片段向量。项目支持指定文档问答、引用来源、无依据拒答、重复文档检测、简历与岗位 JD 匹配分析、简历结构化解析、JD 结构化解析、简历优化建议、面试准备包、STAR 面试答案、简历版本管理、历史查询、生成历史回看、岗位收藏、分析结果对比、前端演示和自动化评测。
 ```
 
 职责与亮点：
@@ -27,8 +27,8 @@ Spring Boot + FastAPI 企业智能知识库 RAG 问答系统 + 求职辅助 Agen
 - 实现指定文档 RAG 问答，Spring Boot 校验 documentId 是否属于当前会话的知识库，避免跨知识库越权检索。
 - 在 FastAPI 中实现无 Rerank 与 Rerank 两条链路，保留 vector_score 并新增 rerank_score，通过 rerank_min_score 控制拒答。
 - 建立 30 条评测集，覆盖普通问答和拒答题，评估 Hit@K、拒答准确率、答案关键词召回、引用有效率、引用支持率、fallback 和 Rerank 耗时。
-- 提供 Vue3 企业知识库工作台，支持创建知识库、上传 PDF、创建会话、提问、查看引用来源、切换用户身份、权限验证和求职分析分区展示，并保留原始联调页用于接口排查。
-- 扩展求职辅助 Agent：FastAPI 负责构建求职分析 Prompt、调用通义千问并解析 JSON；Spring Boot 提供 `POST /api/job-agent/analyze`、`GET /api/job-agent/tasks`、`GET /api/job-agent/tasks/{taskId}` 和 `DELETE /api/job-agent/tasks/{taskId}`，保存、查询、删除求职分析历史并校验访问权限。
+- 提供 Vue3 企业知识库工作台，支持创建知识库、上传 PDF、创建会话、提问、查看引用来源、切换用户身份、权限验证、求职分析分区展示、简历结构化解析、JD 结构化解析、简历优化建议、面试准备包、STAR 面试答案、生成历史、简历版本管理、岗位收藏、分析结果对比决策面板和 Markdown 报告导出，并保留原始联调页用于接口排查。
+- 扩展求职辅助 Agent：FastAPI 负责构建求职分析、简历结构化、JD 结构化、简历优化、面试准备和 STAR 面试答案 Prompt、调用通义千问并解析 JSON；Spring Boot 提供 `POST /api/job-agent/analyze`、`POST /api/job-agent/resume/parse`、`POST /api/job-agent/jd/parse`、`POST /api/job-agent/resume/optimize`、`POST /api/job-agent/interview/prepare`、`POST /api/job-agent/interview/star-answer`、`GET /api/job-agent/tasks`、`GET /api/job-agent/tasks/{taskId}`、`DELETE /api/job-agent/tasks/{taskId}`、`POST /api/job-agent/tasks/compare`、生成历史接口、简历版本接口和收藏岗位 CRUD 接口，保存、查询、删除求职分析历史、生成历史、简历版本与收藏岗位，并校验访问权限。
 - 使用 pytest 和 JUnit 固化回归测试，覆盖 FastAPI 核心链路、评测工具函数、Spring Boot 权限边界、聊天流程、文档重复检测和静态页面。
 - 使用 Docker Compose 管理 MySQL、Qdrant 和 FastAPI 容器，配合 .env.example、启动文档和新电脑恢复指南提升项目可复现性。
 ```
@@ -61,8 +61,8 @@ Java 21, Spring Boot, Spring Data JPA, MySQL, Python, FastAPI, Pydantic, Qdrant,
 自动化测试：
 
 ```text
-FastAPI pytest：72 passed
-Spring Boot Maven test：30 passed
+FastAPI pytest：96 passed
+Spring Boot Maven test：57 passed
 ```
 
 Rerank 阈值实验结论：
@@ -89,5 +89,5 @@ candidate_k=6、rerank_top_k=3 时，rerank_min_score=0.75 和 0.78 都能保持
 
 文档上传后，系统会先在 Spring Boot 中保存文档记录并计算文件 Hash，避免重复入库；然后调用 FastAPI 完成解析、切分、向量化并写入 Qdrant。用户提问时，Spring Boot 会先校验用户是否有权限访问当前知识库，并校验 documentId 是否属于当前会话的知识库，再调用 FastAPI 进行指定文档 RAG 问答。
 
-为了减少幻觉，我实现了引用来源、无依据拒答和 qwen3-rerank 重排，并建立了 30 条评测集，对回答通过率、拒答准确率、引用有效率、引用支持率和 Rerank 参数进行对比。项目还扩展了求职辅助 Agent，支持简历与岗位 JD 匹配分析、结果持久化和历史查询，并提供 Vue3 企业工作台、原始联调页和自动化测试，方便完整展示从文档上传到问答、权限控制、求职分析和历史查询的流程。
+为了减少幻觉，我实现了引用来源、无依据拒答和 qwen3-rerank 重排，并建立了 30 条评测集，对回答通过率、拒答准确率、引用有效率、引用支持率和 Rerank 参数进行对比。项目还扩展了求职辅助 Agent，支持简历与岗位 JD 匹配分析、简历结构化解析、JD 结构化解析、简历优化建议、面试准备包、STAR 面试答案、简历版本管理、结果持久化、生成历史回看、历史查询、岗位收藏、多次分析结果对比决策面板和 Markdown 报告导出，并提供 Vue3 企业工作台、原始联调页和自动化测试，方便完整展示从文档上传到问答、权限控制、求职分析和历史查询的流程。
 ```

@@ -17,6 +17,15 @@ Docker Compose 启动 MySQL / Qdrant
 
 这样最适合学习和调试：数据库和向量库交给 Docker，业务代码在本地 IDE 里跑。
 
+完整 Docker 启动方式：
+
+```text
+Docker Compose 启动 MySQL / Qdrant / FastAPI / Spring Boot
+-> 浏览器打开 Vue3 企业知识库工作台
+```
+
+这种方式适合快速演示和在新电脑上验证完整系统。
+
 ## 1. 环境变量
 
 项目使用 `.env` 管理本地环境变量。
@@ -42,6 +51,7 @@ DASHSCOPE_API_KEY=你的真实 API Key
 - Docker Compose 中的 FastAPI 容器也会读取 `.env`。
 - Docker Compose 中的 MySQL 会读取 `MYSQL_ROOT_PASSWORD`、`MYSQL_DATABASE`、`MYSQL_USER`、`MYSQL_PASSWORD`。
 - Spring Boot 的 MySQL 配置可以通过 `MYSQL_URL`、`MYSQL_USER`、`MYSQL_PASSWORD` 覆盖。
+- Docker Compose 中的 Spring Boot 容器会把 FastAPI 地址覆盖为 `http://api:8000`。
 - `docker compose config` 会把 `.env` 中的真实值展开显示，排查配置时可以用，但不要把完整输出发到公开平台。
 
 ## 2. 推荐启动方式：本地代码 + Docker 基础设施
@@ -178,34 +188,51 @@ Ctrl + F5 强制刷新
 docs/day3_frontend_demo_script.md
 ```
 
-## 3. 一键启动 FastAPI 容器方式
+## 3. 一键启动完整系统
 
-如果只想验证 FastAPI + Qdrant，或者想测试 Docker 构建，可以执行：
+如果想用 Docker Compose 一次性启动 MySQL、Qdrant、FastAPI 和 Spring Boot，可以执行：
 
 ```powershell
 cd D:\pycharm\rag-knowledge-base
-docker compose up --build -d qdrant api
+docker compose up --build -d
 ```
 
 查看日志：
 
 ```powershell
+docker compose logs -f backend
 docker compose logs -f api
+docker compose logs -f mysql
 docker compose logs -f qdrant
 ```
 
-注意：
+启动后访问：
 
 ```text
-api 容器中的 QDRANT_URL 会被 docker-compose.yml 覆盖为 http://qdrant:6333。
-本地 Python 启动 FastAPI 时，QDRANT_URL 使用 http://127.0.0.1:6333。
+Vue3 企业工作台: http://127.0.0.1:8080/index.html
+原始联调页: http://127.0.0.1:8080/debug.html
+Spring Boot 健康检查: http://127.0.0.1:8080/api/health
+FastAPI Swagger: http://127.0.0.1:8000/docs
+FastAPI 健康检查: http://127.0.0.1:8000/health
+Qdrant 检查: http://127.0.0.1:8000/qdrant/health
 ```
 
-如果要同时启动 MySQL：
+如果是为了面试或项目展示，启动完成后建议按下面两份文档走：
 
-```powershell
-docker compose up --build -d mysql qdrant api
+```text
+docs/final_demo_script.md       最终面试演示脚本
+docs/pre_submit_checklist.md    GitHub 提交前检查清单
 ```
+
+容器内部通信地址：
+
+```text
+backend -> mysql:3306
+backend -> api:8000
+api -> qdrant:6333
+```
+
+宿主机浏览器访问地址仍然使用 `127.0.0.1` 暴露端口。
 
 ## 4. 端口说明
 
@@ -458,10 +485,10 @@ docker compose down -v
 
 ```text
 [ ] .env 已配置 DASHSCOPE_API_KEY
-[ ] docker compose up -d mysql qdrant 已执行
-[ ] 3307 / 6333 端口正常
-[ ] FastAPI 已启动，/health 正常
-[ ] Spring Boot 已启动，/api/health 正常
+[ ] docker compose up --build -d 已执行
+[ ] 8080 / 8000 / 6333 / 3307 端口正常
+[ ] FastAPI /health 正常
+[ ] Spring Boot /api/health 正常
 [ ] http://127.0.0.1:8080/index.html 能打开
 [ ] http://127.0.0.1:8080/debug.html 能打开
 [ ] 页面能从 MySQL 恢复知识库、文档和会话
