@@ -6,6 +6,8 @@
 
 ```bash
 bash scripts/pre_submit_check.sh
+# 或者
+make pre-submit
 ```
 
 脚本会依次检查本地忽略规则、疑似密钥、空白问题、Markdown 本地链接、Docker Compose 配置、FastAPI 测试和 Spring Boot 测试。下面的分项说明用于你想手动排查时参考。
@@ -169,6 +171,15 @@ final_demo_script 演示流程
 ```
 
 ## 8. 推荐提交顺序
+
+常用命令可以通过 Makefile 统一入口执行：
+
+```bash
+make help
+make pre-submit
+make smoke
+make demo-job
+```
 
 提交前先查看变更：
 

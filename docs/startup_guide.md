@@ -26,6 +26,17 @@ Docker Compose 启动 MySQL / Qdrant / FastAPI / Spring Boot
 
 这种方式适合快速演示和在新电脑上验证完整系统。
 
+项目根目录也提供了 `Makefile` 作为常用命令入口：
+
+```bash
+make help
+make docker-infra
+make docker-up
+make smoke
+make pre-submit
+make demo-job
+```
+
 ## 1. 环境变量
 
 项目使用 `.env` 管理本地环境变量。
@@ -63,6 +74,12 @@ DASHSCOPE_API_KEY=你的真实 API Key
 ```powershell
 cd D:\pycharm\rag-knowledge-base
 docker compose up -d mysql qdrant
+```
+
+等价 Makefile 命令：
+
+```bash
+make docker-infra
 ```
 
 当前端口：
@@ -195,6 +212,12 @@ docs/day3_frontend_demo_script.md
 ```powershell
 cd D:\pycharm\rag-knowledge-base
 docker compose up --build -d
+```
+
+等价 Makefile 命令：
+
+```bash
+make docker-up
 ```
 
 查看日志：

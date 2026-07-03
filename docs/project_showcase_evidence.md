@@ -26,6 +26,8 @@
 
 ```bash
 bash scripts/pre_submit_check.sh
+# 或者
+make pre-submit
 ```
 
 检查内容：
@@ -102,6 +104,8 @@ bash scripts/demo_job_agent.sh
 
 ```bash
 bash scripts/smoke_check.sh
+# 或者
+make smoke
 ```
 
 这个脚本只检查 Spring Boot、FastAPI、Qdrant、Vue3 工作台和 debug 页是否可访问，不调用 DashScope，也不写入 demo 数据。
@@ -123,6 +127,8 @@ mvn -s maven-settings.xml spring-boot:run
 ```bash
 cp .env.example .env
 docker compose up --build -d
+# 或者
+make docker-up
 ```
 
 启动后检查：

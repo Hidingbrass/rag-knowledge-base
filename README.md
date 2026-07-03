@@ -482,6 +482,16 @@ app/
 
 [启动与部署说明](docs/startup_guide.md)
 
+常用命令可以直接使用 Makefile：
+
+```bash
+make help
+make pre-submit
+make docker-up
+make smoke
+make demo-job
+```
+
 面试展示和提交检查见：
 
 - [最终面试演示脚本](docs/final_demo_script.md)
@@ -559,12 +569,16 @@ bash scripts/smoke_check.sh
 
 ```bash
 bash scripts/pre_submit_check.sh
+# 或者
+make pre-submit
 ```
 
 服务启动后的快速冒烟检查：
 
 ```bash
 bash scripts/smoke_check.sh
+# 或者
+make smoke
 ```
 
 也可以分开执行：
