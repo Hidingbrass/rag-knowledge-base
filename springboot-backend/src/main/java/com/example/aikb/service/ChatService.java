@@ -20,6 +20,9 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+import static com.example.aikb.common.RequestIdentity.requireDepartment;
+import static com.example.aikb.common.RequestIdentity.requireUserId;
+
 /**
  * 聊天业务服务。
  * <p>
@@ -263,17 +266,4 @@ public class ChatService {
         }
     }
 
-    private String requireUserId(String userId) {
-        if (userId == null || userId.isBlank()) {
-            throw new BusinessException("用户 ID 不能为空");
-        }
-        return userId.trim();
-    }
-
-    private String requireDepartment(String department) {
-        if (department == null || department.isBlank()) {
-            throw new BusinessException("部门不能为空");
-        }
-        return department.trim();
-    }
 }

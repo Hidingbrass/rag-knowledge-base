@@ -45,6 +45,8 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
+import static com.example.aikb.common.RequestIdentity.requireUserId;
+
 /**
  * 求职辅助 Agent 业务服务。
  * <p>
@@ -456,10 +458,4 @@ public class JobAgentService {
         );
     }
 
-    private String requireUserId(String userId) {
-        if (userId == null || userId.isBlank()) {
-            throw new BusinessException("用户 ID 不能为空");
-        }
-        return userId.trim();
-    }
 }
