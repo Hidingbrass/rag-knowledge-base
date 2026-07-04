@@ -81,6 +81,7 @@ public class JobAgentService {
     }
 
     public FastApiJobAnalyzeResponse analyze(JobAnalyzeRequest request) {
+        String userId = requireUserId(request.userId());
         FastApiJobAnalyzeResponse response = fastApiRagClient.analyzeJob(
                 request.resumeText(),
                 request.jobDescription()
@@ -88,7 +89,7 @@ public class JobAgentService {
         String resultJson = toResultJson(response);
         JobAnalysisTask task = new JobAnalysisTask(
                 UUID.randomUUID(),
-                request.userId(),
+                userId,
                 request.resumeText(),
                 request.jobDescription(),
                 response.matchScore(),
@@ -120,7 +121,7 @@ public class JobAgentService {
     }
 
     public List<JobAnalysisTaskResponse> listTasks(String userId) {
-        List<JobAnalysisTask> tasks = jobAnalysisTaskRepository.findByUserIdOrderByCreatedAtDesc(userId);
+        List<JobAnalysisTask> tasks = jobAnalysisTaskRepository.findByUserIdOrderByCreatedAtDesc(requireUserId(userId));
         return tasks
                 .stream()
                 .map(this::toResponse)
@@ -133,9 +134,10 @@ public class JobAgentService {
     }
 
     private JobAnalysisTask getOwnedTask(UUID taskId, String userId) {
+        String requiredUserId = requireUserId(userId);
         JobAnalysisTask task = jobAnalysisTaskRepository.findById(taskId)
                 .orElseThrow(() -> new BusinessException("求职分析记录不存在: " + taskId));
-        if (!task.userId().equals(userId)) {
+        if (!task.userId().equals(requiredUserId)) {
             throw new ForbiddenException("无权访问该求职分析记录: " + taskId);
         }
 
@@ -148,9 +150,10 @@ public class JobAgentService {
     }
 
     public JobTaskCompareResponse compareTasks(JobTaskCompareRequest request) {
+        String userId = requireUserId(request.userId());
         List<JobTaskCompareItem> items = request.taskIds()
                 .stream()
-                .map(taskId -> toCompareItem(getOwnedTask(taskId, request.userId())))
+                .map(taskId -> toCompareItem(getOwnedTask(taskId, userId)))
                 .toList();
         JobTaskCompareItem bestItem = items
                 .stream()
@@ -228,12 +231,13 @@ public class JobAgentService {
     }
 
     public FastApiResumeOptimizeResponse optimizeResume(ResumeOptimizeRequest request) {
+        String userId = requireUserId(request.userId());
         FastApiResumeOptimizeResponse response = fastApiRagClient.optimizeResume(
                 request.resumeText(),
                 request.jobDescription()
         );
         saveGeneratedTask(
-                request.userId(),
+                userId,
                 JobGeneratedTaskType.RESUME_OPTIMIZE,
                 request.resumeText(),
                 request.jobDescription(),
@@ -243,12 +247,13 @@ public class JobAgentService {
     }
 
     public FastApiInterviewPrepResponse prepareInterview(InterviewPrepRequest request) {
+        String userId = requireUserId(request.userId());
         FastApiInterviewPrepResponse response = fastApiRagClient.prepareInterview(
                 request.resumeText(),
                 request.jobDescription()
         );
         saveGeneratedTask(
-                request.userId(),
+                userId,
                 JobGeneratedTaskType.INTERVIEW_PREP,
                 request.resumeText(),
                 request.jobDescription(),
@@ -258,13 +263,14 @@ public class JobAgentService {
     }
 
     public FastApiStarInterviewAnswerResponse generateStarInterviewAnswer(StarInterviewAnswerRequest request) {
+        String userId = requireUserId(request.userId());
         FastApiStarInterviewAnswerResponse response = fastApiRagClient.generateStarInterviewAnswer(
                 request.resumeText(),
                 request.jobDescription(),
                 request.question()
         );
         saveGeneratedTask(
-                request.userId(),
+                userId,
                 JobGeneratedTaskType.STAR_INTERVIEW_ANSWER,
                 request.resumeText(),
                 request.jobDescription(),
@@ -286,9 +292,10 @@ public class JobAgentService {
     }
 
     public List<JobGeneratedTaskResponse> listGeneratedTasks(String userId, JobGeneratedTaskType taskType) {
+        String requiredUserId = requireUserId(userId);
         List<JobGeneratedTask> tasks = taskType == null
-                ? jobGeneratedTaskRepository.findByUserIdOrderByCreatedAtDesc(userId)
-                : jobGeneratedTaskRepository.findByUserIdAndTaskTypeOrderByCreatedAtDesc(userId, taskType);
+                ? jobGeneratedTaskRepository.findByUserIdOrderByCreatedAtDesc(requiredUserId)
+                : jobGeneratedTaskRepository.findByUserIdAndTaskTypeOrderByCreatedAtDesc(requiredUserId, taskType);
         return tasks.stream()
                 .map(this::toGeneratedTaskResponse)
                 .toList();
@@ -304,9 +311,10 @@ public class JobAgentService {
     }
 
     private JobGeneratedTask getOwnedGeneratedTask(UUID taskId, String userId) {
+        String requiredUserId = requireUserId(userId);
         JobGeneratedTask task = jobGeneratedTaskRepository.findById(taskId)
                 .orElseThrow(() -> new BusinessException("求职生成记录不存在: " + taskId));
-        if (!task.userId().equals(userId)) {
+        if (!task.userId().equals(requiredUserId)) {
             throw new ForbiddenException("无权访问该求职生成记录: " + taskId);
         }
 
@@ -326,9 +334,10 @@ public class JobAgentService {
     }
 
     public JobFavoriteResponse createFavorite(JobFavoriteRequest request) {
+        String userId = requireUserId(request.userId());
         JobFavorite favorite = new JobFavorite(
                 UUID.randomUUID(),
-                request.userId(),
+                userId,
                 request.jobTitle(),
                 request.companyName(),
                 request.jobDescription(),
@@ -340,7 +349,7 @@ public class JobAgentService {
     }
 
     public List<JobFavoriteResponse> listFavorites(String userId) {
-        return jobFavoriteRepository.findByUserIdOrderByCreatedAtDesc(userId)
+        return jobFavoriteRepository.findByUserIdOrderByCreatedAtDesc(requireUserId(userId))
                 .stream()
                 .map(this::toFavoriteResponse)
                 .toList();
@@ -356,9 +365,10 @@ public class JobAgentService {
     }
 
     private JobFavorite getOwnedFavorite(UUID favoriteId, String userId) {
+        String requiredUserId = requireUserId(userId);
         JobFavorite favorite = jobFavoriteRepository.findById(favoriteId)
                 .orElseThrow(() -> new BusinessException("收藏岗位不存在: " + favoriteId));
-        if (!favorite.userId().equals(userId)) {
+        if (!favorite.userId().equals(requiredUserId)) {
             throw new ForbiddenException("无权访问该收藏岗位: " + favoriteId);
         }
 
@@ -379,10 +389,11 @@ public class JobAgentService {
     }
 
     public JobResumeVersionResponse createResumeVersion(JobResumeVersionRequest request) {
+        String userId = requireUserId(request.userId());
         Instant now = Instant.now();
         JobResumeVersion version = new JobResumeVersion(
                 UUID.randomUUID(),
-                request.userId(),
+                userId,
                 request.versionName(),
                 request.targetRole(),
                 request.resumeText(),
@@ -394,7 +405,7 @@ public class JobAgentService {
     }
 
     public List<JobResumeVersionResponse> listResumeVersions(String userId) {
-        return jobResumeVersionRepository.findByUserIdOrderByUpdatedAtDesc(userId)
+        return jobResumeVersionRepository.findByUserIdOrderByUpdatedAtDesc(requireUserId(userId))
                 .stream()
                 .map(this::toResumeVersionResponse)
                 .toList();
@@ -405,7 +416,7 @@ public class JobAgentService {
     }
 
     public JobResumeVersionResponse updateResumeVersion(UUID versionId, JobResumeVersionRequest request) {
-        JobResumeVersion version = getOwnedResumeVersion(versionId, request.userId());
+        JobResumeVersion version = getOwnedResumeVersion(versionId, requireUserId(request.userId()));
         version.update(
                 request.versionName(),
                 request.targetRole(),
@@ -422,9 +433,10 @@ public class JobAgentService {
     }
 
     private JobResumeVersion getOwnedResumeVersion(UUID versionId, String userId) {
+        String requiredUserId = requireUserId(userId);
         JobResumeVersion version = jobResumeVersionRepository.findById(versionId)
                 .orElseThrow(() -> new BusinessException("简历版本不存在: " + versionId));
-        if (!version.userId().equals(userId)) {
+        if (!version.userId().equals(requiredUserId)) {
             throw new ForbiddenException("无权访问该简历版本: " + versionId);
         }
 
@@ -442,5 +454,12 @@ public class JobAgentService {
                 version.createdAt(),
                 version.updatedAt()
         );
+    }
+
+    private String requireUserId(String userId) {
+        if (userId == null || userId.isBlank()) {
+            throw new BusinessException("用户 ID 不能为空");
+        }
+        return userId.trim();
     }
 }

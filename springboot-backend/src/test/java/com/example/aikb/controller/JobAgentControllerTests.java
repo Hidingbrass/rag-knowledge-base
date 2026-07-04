@@ -866,6 +866,50 @@ class JobAgentControllerTests {
     }
 
     @Test
+    void queryEndpointsShouldReturnBadRequestWhenUserIdIsBlank() throws Exception {
+        mockMvc.perform(get("/api/job-agent/tasks")
+                        .param("userId", " "))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("用户 ID 不能为空"));
+
+        mockMvc.perform(get("/api/job-agent/favorites")
+                        .param("userId", " "))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("用户 ID 不能为空"));
+
+        mockMvc.perform(get("/api/job-agent/generated-tasks")
+                        .param("userId", " "))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("用户 ID 不能为空"));
+
+        mockMvc.perform(get("/api/job-agent/resume-versions")
+                        .param("userId", " "))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("用户 ID 不能为空"));
+    }
+
+    @Test
+    void queryEndpointShouldReturnBadRequestWhenUserIdIsMissing() throws Exception {
+        mockMvc.perform(get("/api/job-agent/tasks"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("请求参数缺失: userId"));
+    }
+
+    @Test
+    void detailEndpointShouldReturnBadRequestWhenUuidIsInvalid() throws Exception {
+        mockMvc.perform(get("/api/job-agent/tasks/not-a-uuid")
+                        .param("userId", "demo-user"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("请求参数类型不合法: taskId"));
+    }
+
+    @Test
     void getGeneratedTaskShouldReturnDetailAndRejectOtherUser() throws Exception {
         UUID taskId = UUID.randomUUID();
         jobGeneratedTaskRepository.save(new JobGeneratedTask(
