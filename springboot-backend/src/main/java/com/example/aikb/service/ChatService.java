@@ -104,12 +104,14 @@ public class ChatService {
      * 4. 返回保存后的会话对象。
      */
     public ChatSession createSession(CreateChatSessionRequest request) {
-        knowledgeBaseService.getRequiredWithAccess(request.knowledgeBaseId(), request.userId(), request.department());
+        String userId = requireUserId(request.userId());
+        String department = requireDepartment(request.department());
+        knowledgeBaseService.getRequiredWithAccess(request.knowledgeBaseId(), userId, department);
 
         ChatSession chatSession = new ChatSession(
                 UUID.randomUUID(),
                 request.knowledgeBaseId(),
-                request.userId(),
+                userId,
                 request.title(),
                 Instant.now()
         );
@@ -151,7 +153,7 @@ public class ChatService {
      * 这个方法可以从 MySQL 重新加载历史会话，让页面恢复到可继续操作的状态。
      */
     public List<ChatSession> listSessionsByUserId(String userId) {
-        return chatSessionRepository.findByUserIdOrderByCreatedAtDesc(userId);
+        return chatSessionRepository.findByUserIdOrderByCreatedAtDesc(requireUserId(userId));
     }
 
     /**
@@ -259,5 +261,19 @@ public class ChatService {
         } catch (Exception exception) {
             throw new BusinessException("保存引用来源失败", exception);
         }
+    }
+
+    private String requireUserId(String userId) {
+        if (userId == null || userId.isBlank()) {
+            throw new BusinessException("用户 ID 不能为空");
+        }
+        return userId.trim();
+    }
+
+    private String requireDepartment(String department) {
+        if (department == null || department.isBlank()) {
+            throw new BusinessException("部门不能为空");
+        }
+        return department.trim();
     }
 }

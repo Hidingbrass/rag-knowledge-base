@@ -35,8 +35,8 @@ public class KnowledgeBaseService {
                 UUID.randomUUID(),
                 request.name(),
                 request.description(),
-                request.ownerId(),
-                request.department(),
+                requireUserId(request.ownerId()),
+                requireDepartment(request.department()),
                 Instant.now()
         );
 
@@ -57,9 +57,11 @@ public class KnowledgeBaseService {
      * - 既不是创建者，也不是同部门用户时拒绝访问。
      */
     public KnowledgeBase getRequiredWithAccess(UUID knowledgeBaseId, String userId, String department) {
+        String requiredUserId = requireUserId(userId);
+        String requiredDepartment = requireDepartment(department);
         KnowledgeBase knowledgeBase = getRequired(knowledgeBaseId);
-        boolean isOwner = knowledgeBase.ownerId().equals(userId);
-        boolean isSameDepartment = knowledgeBase.department().equals(department);
+        boolean isOwner = knowledgeBase.ownerId().equals(requiredUserId);
+        boolean isSameDepartment = knowledgeBase.department().equals(requiredDepartment);
         if (!isOwner && !isSameDepartment) {
             throw new ForbiddenException("无权访问知识库: " + knowledgeBaseId);
         }
@@ -68,5 +70,19 @@ public class KnowledgeBaseService {
 
     public List<KnowledgeBase> list() {
         return repository.findAllByOrderByCreatedAtDesc();
+    }
+
+    private String requireUserId(String userId) {
+        if (userId == null || userId.isBlank()) {
+            throw new BusinessException("用户 ID 不能为空");
+        }
+        return userId.trim();
+    }
+
+    private String requireDepartment(String department) {
+        if (department == null || department.isBlank()) {
+            throw new BusinessException("部门不能为空");
+        }
+        return department.trim();
     }
 }

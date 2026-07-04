@@ -44,6 +44,19 @@ class KnowledgeBaseServiceTests {
     }
 
     @Test
+    void createShouldTrimOwnerIdAndDepartment() {
+        KnowledgeBase knowledgeBase = service.create(new CreateKnowledgeBaseRequest(
+                "研发知识库",
+                "保存研发制度和项目文档",
+                " user-1 ",
+                " 研发部 "
+        ));
+
+        assertThat(knowledgeBase.ownerId()).isEqualTo("user-1");
+        assertThat(knowledgeBase.department()).isEqualTo("研发部");
+    }
+
+    @Test
     void getRequiredShouldThrowWhenKnowledgeBaseNotFound() {
         assertThatThrownBy(() -> service.getRequired(UUID.randomUUID()))
                 .isInstanceOf(BusinessException.class)
@@ -68,6 +81,27 @@ class KnowledgeBaseServiceTests {
     void getRequiredWithAccessShouldAllowSameDepartmentUser() {
         KnowledgeBase knowledgeBase = createResearchKnowledgeBase();
         assertThat(service.getRequiredWithAccess(knowledgeBase.id(), "user-2", "研发部")).isEqualTo(knowledgeBase);
+    }
+
+    @Test
+    void getRequiredWithAccessShouldTrimIdentityBeforePermissionCheck() {
+        KnowledgeBase knowledgeBase = createResearchKnowledgeBase();
+
+        assertThat(service.getRequiredWithAccess(knowledgeBase.id(), " user-1 ", " 销售部 ")).isEqualTo(knowledgeBase);
+        assertThat(service.getRequiredWithAccess(knowledgeBase.id(), " user-2 ", " 研发部 ")).isEqualTo(knowledgeBase);
+    }
+
+    @Test
+    void getRequiredWithAccessShouldRejectBlankIdentity() {
+        KnowledgeBase knowledgeBase = createResearchKnowledgeBase();
+
+        assertThatThrownBy(() -> service.getRequiredWithAccess(knowledgeBase.id(), " ", "研发部"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("用户 ID 不能为空");
+
+        assertThatThrownBy(() -> service.getRequiredWithAccess(knowledgeBase.id(), "user-1", " "))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("部门不能为空");
     }
 
     @Test

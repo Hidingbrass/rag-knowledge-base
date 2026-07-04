@@ -119,6 +119,40 @@ class ChatControllerTests {
     }
 
     @Test
+    void createSessionShouldTrimIdentityBeforeSavingSession() throws Exception {
+        KnowledgeBase knowledgeBase = knowledgeBaseService.create(new CreateKnowledgeBaseRequest(
+                "Research Knowledge Base",
+                "Used by chat controller identity tests",
+                "user-1",
+                "dev"
+        ));
+
+        mockMvc.perform(post("/api/chat/sessions")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "knowledgeBaseId": "%s",
+                                  "userId": " user-1 ",
+                                  "department": " dev ",
+                                  "title": "Trim identity session"
+                                }
+                                """.formatted(knowledgeBase.id())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.userId").value("user-1"))
+                .andExpect(jsonPath("$.data.title").value("Trim identity session"));
+    }
+
+    @Test
+    void listSessionsShouldReturnBadRequestWhenUserIdIsBlank() throws Exception {
+        mockMvc.perform(get("/api/chat/sessions")
+                        .param("userId", " "))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("用户 ID 不能为空"));
+    }
+
+    @Test
     void listMessagesShouldReturnForbiddenWhenUserHasNoAccess() throws Exception {
         ChatSession session = createDevSession();
 
