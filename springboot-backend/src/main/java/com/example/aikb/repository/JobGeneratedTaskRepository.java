@@ -2,6 +2,8 @@ package com.example.aikb.repository;
 
 import com.example.aikb.entity.JobGeneratedTask;
 import com.example.aikb.entity.JobGeneratedTaskType;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
@@ -11,4 +13,8 @@ public interface JobGeneratedTaskRepository extends JpaRepository<JobGeneratedTa
     List<JobGeneratedTask> findByUserIdOrderByCreatedAtDesc(String userId);
 
     List<JobGeneratedTask> findByUserIdAndTaskTypeOrderByCreatedAtDesc(String userId, JobGeneratedTaskType taskType);
+
+    Page<JobGeneratedTask> findByUserIdOrderByCreatedAtDesc(String userId, Pageable pageable);
+
+    Page<JobGeneratedTask> findByUserIdAndTaskTypeOrderByCreatedAtDesc(String userId, JobGeneratedTaskType taskType, Pageable pageable);
 }

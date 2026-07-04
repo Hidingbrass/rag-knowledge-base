@@ -229,6 +229,42 @@ class JobAgentControllerTests {
     }
 
     @Test
+    void listFavoritesPageShouldReturnPagedFavoritesWithMetadata() throws Exception {
+        Instant now = Instant.now();
+        jobFavoriteRepository.save(new JobFavorite(
+                UUID.randomUUID(),
+                "demo-user",
+                "较早岗位",
+                "AI 科技公司",
+                "需要 Java",
+                null,
+                null,
+                now.minusSeconds(60)
+        ));
+        jobFavoriteRepository.save(new JobFavorite(
+                UUID.randomUUID(),
+                "demo-user",
+                "最新岗位",
+                "AI 科技公司",
+                "需要 Spring Boot",
+                null,
+                null,
+                now
+        ));
+
+        mockMvc.perform(get("/api/job-agent/favorites/page")
+                        .param("userId", "demo-user")
+                        .param("page", "0")
+                        .param("size", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.content.length()").value(1))
+                .andExpect(jsonPath("$.data.content[0].jobTitle").value("最新岗位"))
+                .andExpect(jsonPath("$.data.totalElements").value(2))
+                .andExpect(jsonPath("$.data.totalPages").value(2));
+    }
+
+    @Test
     void getFavoriteShouldReturnDetailAndRejectOtherUser() throws Exception {
         UUID favoriteId = UUID.randomUUID();
         jobFavoriteRepository.save(new JobFavorite(
@@ -356,6 +392,42 @@ class JobAgentControllerTests {
                 .andExpect(jsonPath("$.data.length()").value(1))
                 .andExpect(jsonPath("$.data[0].userId").value("demo-user"))
                 .andExpect(jsonPath("$.data[0].versionName").value("RAG 项目强化版"));
+    }
+
+    @Test
+    void listResumeVersionsPageShouldReturnPagedVersionsWithMetadata() throws Exception {
+        Instant now = Instant.now();
+        jobResumeVersionRepository.save(new JobResumeVersion(
+                UUID.randomUUID(),
+                "demo-user",
+                "较早版本",
+                "Java 后端开发工程师",
+                "Spring Boot FastAPI RAG 项目",
+                null,
+                now.minusSeconds(60),
+                now.minusSeconds(60)
+        ));
+        jobResumeVersionRepository.save(new JobResumeVersion(
+                UUID.randomUUID(),
+                "demo-user",
+                "最新版本",
+                "AI 应用开发工程师",
+                "Spring Boot FastAPI RAG 项目",
+                null,
+                now,
+                now
+        ));
+
+        mockMvc.perform(get("/api/job-agent/resume-versions/page")
+                        .param("userId", "demo-user")
+                        .param("page", "0")
+                        .param("size", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.content.length()").value(1))
+                .andExpect(jsonPath("$.data.content[0].versionName").value("最新版本"))
+                .andExpect(jsonPath("$.data.totalElements").value(2))
+                .andExpect(jsonPath("$.data.totalPages").value(2));
     }
 
     @Test
@@ -866,6 +938,55 @@ class JobAgentControllerTests {
     }
 
     @Test
+    void listGeneratedTasksPageShouldFilterByUserAndTypeWithMetadata() throws Exception {
+        Instant now = Instant.now();
+        jobGeneratedTaskRepository.save(new JobGeneratedTask(
+                UUID.randomUUID(),
+                "demo-user",
+                JobGeneratedTaskType.RESUME_OPTIMIZE,
+                "Spring Boot FastAPI RAG 项目",
+                "需要 Java、Spring Boot、RAG",
+                "{\"summary\":\"较早优化建议\"}",
+                now.minusSeconds(60)
+        ));
+        jobGeneratedTaskRepository.save(new JobGeneratedTask(
+                UUID.randomUUID(),
+                "demo-user",
+                JobGeneratedTaskType.RESUME_OPTIMIZE,
+                "Spring Boot FastAPI RAG 项目",
+                "需要 Java、Spring Boot、RAG",
+                "{\"summary\":\"最新优化建议\"}",
+                now
+        ));
+        jobGeneratedTaskRepository.save(new JobGeneratedTask(
+                UUID.randomUUID(),
+                "demo-user",
+                JobGeneratedTaskType.INTERVIEW_PREP,
+                "Spring Boot FastAPI RAG 项目",
+                "需要 Java、Spring Boot、RAG",
+                "{\"target_position\":\"Java 后端开发工程师\"}",
+                now.plusSeconds(60)
+        ));
+
+        mockMvc.perform(get("/api/job-agent/generated-tasks/page")
+                        .param("userId", "demo-user")
+                        .param("taskType", "RESUME_OPTIMIZE")
+                        .param("page", "0")
+                        .param("size", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.content.length()").value(1))
+                .andExpect(jsonPath("$.data.content[0].resultJson").value("{\"summary\":\"最新优化建议\"}"))
+                .andExpect(jsonPath("$.data.content[0].taskType").value("RESUME_OPTIMIZE"))
+                .andExpect(jsonPath("$.data.page").value(0))
+                .andExpect(jsonPath("$.data.size").value(1))
+                .andExpect(jsonPath("$.data.totalElements").value(2))
+                .andExpect(jsonPath("$.data.totalPages").value(2))
+                .andExpect(jsonPath("$.data.first").value(true))
+                .andExpect(jsonPath("$.data.last").value(false));
+    }
+
+    @Test
     void queryEndpointsShouldReturnBadRequestWhenUserIdIsBlank() throws Exception {
         mockMvc.perform(get("/api/job-agent/tasks")
                         .param("userId", " "))
@@ -984,6 +1105,71 @@ class JobAgentControllerTests {
                 .andExpect(jsonPath("$.data[0].jobDescription").value("需要 Java、Spring Boot、FastAPI、RAG"))
                 .andExpect(jsonPath("$.data[0].matchScore").value(95))
                 .andExpect(jsonPath("$.data[0].resultJson").value("{\"match_score\":95,\"matched_skills\":[\"Spring Boot\"]}"));
+    }
+
+    @Test
+    void listTasksPageShouldReturnPagedHistoryWithMetadata() throws Exception {
+        Instant now = Instant.now();
+        jobAnalysisTaskRepository.save(new JobAnalysisTask(
+                UUID.randomUUID(),
+                "demo-user",
+                "较早 RAG 项目",
+                "需要 Java",
+                80,
+                "{\"match_score\":80}",
+                now.minusSeconds(60)
+        ));
+        jobAnalysisTaskRepository.save(new JobAnalysisTask(
+                UUID.randomUUID(),
+                "demo-user",
+                "最新 RAG 项目",
+                "需要 Java、Spring Boot",
+                95,
+                "{\"match_score\":95}",
+                now
+        ));
+        jobAnalysisTaskRepository.save(new JobAnalysisTask(
+                UUID.randomUUID(),
+                "other-user",
+                "其他用户项目",
+                "需要 Python",
+                88,
+                "{\"match_score\":88}",
+                now.plusSeconds(60)
+        ));
+
+        mockMvc.perform(get("/api/job-agent/tasks/page")
+                        .param("userId", "demo-user")
+                        .param("page", "0")
+                        .param("size", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.content.length()").value(1))
+                .andExpect(jsonPath("$.data.content[0].resumeText").value("最新 RAG 项目"))
+                .andExpect(jsonPath("$.data.content[0].matchScore").value(95))
+                .andExpect(jsonPath("$.data.page").value(0))
+                .andExpect(jsonPath("$.data.size").value(1))
+                .andExpect(jsonPath("$.data.totalElements").value(2))
+                .andExpect(jsonPath("$.data.totalPages").value(2));
+    }
+
+    @Test
+    void listTasksPageShouldReturnBadRequestWhenPageOrSizeIsInvalid() throws Exception {
+        mockMvc.perform(get("/api/job-agent/tasks/page")
+                        .param("userId", "demo-user")
+                        .param("page", "-1")
+                        .param("size", "10"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("page 不能小于 0"));
+
+        mockMvc.perform(get("/api/job-agent/tasks/page")
+                        .param("userId", "demo-user")
+                        .param("page", "0")
+                        .param("size", "51"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("size 必须在 1 到 50 之间"));
     }
 
     @Test

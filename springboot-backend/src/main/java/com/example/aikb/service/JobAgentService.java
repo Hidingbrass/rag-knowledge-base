@@ -1,6 +1,7 @@
 package com.example.aikb.service;
 
 import com.example.aikb.client.FastApiRagClient;
+import com.example.aikb.common.PageResponse;
 import com.example.aikb.dto.fastapi.FastApiInterviewPrepResponse;
 import com.example.aikb.dto.fastapi.FastApiJdParseResponse;
 import com.example.aikb.dto.fastapi.FastApiJobAnalyzeResponse;
@@ -36,6 +37,7 @@ import com.example.aikb.repository.JobResumeVersionRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -128,6 +130,13 @@ public class JobAgentService {
                 .stream()
                 .map(this::toResponse)
                 .toList();
+    }
+
+    public PageResponse<JobAnalysisTaskResponse> listTasksPage(String userId, Pageable pageable) {
+        return PageResponse.from(
+                jobAnalysisTaskRepository.findByUserIdOrderByCreatedAtDesc(requireUserId(userId), pageable),
+                this::toResponse
+        );
     }
 
     public JobAnalysisTaskResponse getTask(UUID taskId, String userId) {
@@ -303,6 +312,20 @@ public class JobAgentService {
                 .toList();
     }
 
+    public PageResponse<JobGeneratedTaskResponse> listGeneratedTasksPage(
+            String userId,
+            JobGeneratedTaskType taskType,
+            Pageable pageable
+    ) {
+        String requiredUserId = requireUserId(userId);
+        return PageResponse.from(
+                taskType == null
+                        ? jobGeneratedTaskRepository.findByUserIdOrderByCreatedAtDesc(requiredUserId, pageable)
+                        : jobGeneratedTaskRepository.findByUserIdAndTaskTypeOrderByCreatedAtDesc(requiredUserId, taskType, pageable),
+                this::toGeneratedTaskResponse
+        );
+    }
+
     public JobGeneratedTaskResponse getGeneratedTask(UUID taskId, String userId) {
         return toGeneratedTaskResponse(getOwnedGeneratedTask(taskId, userId));
     }
@@ -355,6 +378,13 @@ public class JobAgentService {
                 .stream()
                 .map(this::toFavoriteResponse)
                 .toList();
+    }
+
+    public PageResponse<JobFavoriteResponse> listFavoritesPage(String userId, Pageable pageable) {
+        return PageResponse.from(
+                jobFavoriteRepository.findByUserIdOrderByCreatedAtDesc(requireUserId(userId), pageable),
+                this::toFavoriteResponse
+        );
     }
 
     public JobFavoriteResponse getFavorite(UUID favoriteId, String userId) {
@@ -411,6 +441,13 @@ public class JobAgentService {
                 .stream()
                 .map(this::toResumeVersionResponse)
                 .toList();
+    }
+
+    public PageResponse<JobResumeVersionResponse> listResumeVersionsPage(String userId, Pageable pageable) {
+        return PageResponse.from(
+                jobResumeVersionRepository.findByUserIdOrderByUpdatedAtDesc(requireUserId(userId), pageable),
+                this::toResumeVersionResponse
+        );
     }
 
     public JobResumeVersionResponse getResumeVersion(UUID versionId, String userId) {

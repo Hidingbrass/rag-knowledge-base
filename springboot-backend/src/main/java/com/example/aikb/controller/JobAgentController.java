@@ -1,6 +1,7 @@
 package com.example.aikb.controller;
 
 import com.example.aikb.common.ApiResponse;
+import com.example.aikb.common.PageResponse;
 import com.example.aikb.dto.fastapi.FastApiInterviewPrepResponse;
 import com.example.aikb.dto.fastapi.FastApiJdParseResponse;
 import com.example.aikb.dto.fastapi.FastApiJobAnalyzeResponse;
@@ -37,6 +38,8 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 import java.util.UUID;
 
+import static com.example.aikb.common.PageRequests.of;
+
 @RestController
 @RequestMapping("/api/job-agent")
 public class JobAgentController {
@@ -59,6 +62,15 @@ public class JobAgentController {
             @RequestParam String userId
     ) {
         return ApiResponse.ok(jobAgentService.listTasks(userId));
+    }
+
+    @GetMapping("/tasks/page")
+    public ApiResponse<PageResponse<JobAnalysisTaskResponse>> listTasksPage(
+            @RequestParam String userId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size
+    ) {
+        return ApiResponse.ok(jobAgentService.listTasksPage(userId, of(page, size)));
     }
 
     @PostMapping("/tasks/compare")
@@ -99,6 +111,15 @@ public class JobAgentController {
         return ApiResponse.ok(jobAgentService.listFavorites(userId));
     }
 
+    @GetMapping("/favorites/page")
+    public ApiResponse<PageResponse<JobFavoriteResponse>> listFavoritesPage(
+            @RequestParam String userId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size
+    ) {
+        return ApiResponse.ok(jobAgentService.listFavoritesPage(userId, of(page, size)));
+    }
+
     @GetMapping("/favorites/{favoriteId}")
     public ApiResponse<JobFavoriteResponse> getFavorite(
             @PathVariable UUID favoriteId,
@@ -122,6 +143,16 @@ public class JobAgentController {
             @RequestParam(required = false) JobGeneratedTaskType taskType
     ) {
         return ApiResponse.ok(jobAgentService.listGeneratedTasks(userId, taskType));
+    }
+
+    @GetMapping("/generated-tasks/page")
+    public ApiResponse<PageResponse<JobGeneratedTaskResponse>> listGeneratedTasksPage(
+            @RequestParam String userId,
+            @RequestParam(required = false) JobGeneratedTaskType taskType,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size
+    ) {
+        return ApiResponse.ok(jobAgentService.listGeneratedTasksPage(userId, taskType, of(page, size)));
     }
 
     @GetMapping("/generated-tasks/{taskId}")
@@ -153,6 +184,15 @@ public class JobAgentController {
             @RequestParam String userId
     ) {
         return ApiResponse.ok(jobAgentService.listResumeVersions(userId));
+    }
+
+    @GetMapping("/resume-versions/page")
+    public ApiResponse<PageResponse<JobResumeVersionResponse>> listResumeVersionsPage(
+            @RequestParam String userId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size
+    ) {
+        return ApiResponse.ok(jobAgentService.listResumeVersionsPage(userId, of(page, size)));
     }
 
     @GetMapping("/resume-versions/{versionId}")
