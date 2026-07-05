@@ -245,3 +245,34 @@ Flyway 把数据库结构变成可审查、可提交、可回放的版本化代�
 以后新增字段或表时，不能只改 Entity，还要新增 V2、V3 这类迁移 SQL。
 已有本地旧库首次接入 Flyway 时需要建立 baseline，避免重复执行初始化建表脚本。
 ```
+
+## ADR-009：在 Spring Boot 侧记录 FastAPI AI 调用日志
+
+决策：
+
+```text
+Spring Boot 在 FastApiRagClient 统一记录调用 FastAPI 的业务类型、接口、耗时、成功失败和错误摘要。
+日志保存到 MySQL ai_call_log 表，并提供最近调用查询接口供工作台展示。
+```
+
+原因：
+
+```text
+Spring Boot 是业务入口，知道一次调用属于文档入库、RAG 问答还是求职 Agent。
+把记录点放在 FastApiRagClient，可以覆盖所有 Spring Boot -> FastAPI 调用，避免每个 Service 重复写耗时代码。
+```
+
+收益：
+
+```text
+可以排查 AI 服务慢调用和失败调用。
+面试演示时能说明系统具备基础可观测性，而不是只会调用模型。
+后续如果 FastAPI 返回 token usage，可以继续把 token 成本补进同一张日志表或扩展表。
+```
+
+代价：
+
+```text
+当前记录的是 Spring Boot 调 FastAPI 的服务间调用日志，不直接记录 DashScope token 明细。
+日志保存失败不能影响主链路，因此日志 Service 会吞掉自身写入异常并输出 warn 日志。
+```

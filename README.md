@@ -94,6 +94,7 @@ flowchart LR
 - Spring Boot 调用 FastAPI 完成文档入库和 RAG 问答
 - MySQL 持久化知识库、文档状态、聊天会话和聊天消息
 - Flyway 管理 Spring Boot 业务库表结构，Hibernate 负责启动时校验 Entity 和数据库是否一致
+- Spring Boot 记录调用 FastAPI AI 服务的业务类型、接口、耗时、成功失败和错误摘要，并在 Vue3 工作台展示最近调用
 - 基于 owner / department 的知识库访问控制
 - 求职辅助 Agent 支持简历与岗位 JD 匹配分析、差距建议和面试题生成
 - 求职辅助 Agent 支持简历结构化解析、岗位 JD 结构化解析、简历优化建议、面试准备包和 STAR 面试答案生成
@@ -462,7 +463,7 @@ core/config：已集中管理 DASHSCOPE_API_KEY、DashScope Base URL、Qdrant �
 core/logging：已统一配置日志输出，记录文档入库、Qdrant 检索、RAG/Rerank、fallback 和异常
 core/exceptions：已统一业务异常和兜底异常处理，api 层不再重复编写 try/except
 pytest：当前全量回归 96 passed，覆盖路由、统一异常、配置默认值、测试集结构、Qdrant source 字段、Rerank 映射、fallback、评测工具函数、CLI 参数解析、JSON 保存、求职 Agent Service 基础逻辑、STAR 面试答案生成和求职分析路由
-Spring Boot：已接入 MySQL/JPA、Flyway 数据库迁移、知识库权限、文档状态、重复上传检测、聊天会话、消息持久化、求职 Agent 分析入口、求职分析任务持久化、优化/面试准备/STAR 答案生成历史、简历版本管理、历史查询、详情、删除、收藏岗位、分析结果对比、Vue3 企业工作台和联调页，当前 Maven 测试 74 passed
+Spring Boot：已接入 MySQL/JPA、Flyway 数据库迁移、AI 调用日志、知识库权限、文档状态、重复上传检测、聊天会话、消息持久化、求职 Agent 分析入口、求职分析任务持久化、优化/面试准备/STAR 答案生成历史、简历版本管理、历史查询、详情、删除、收藏岗位、分析结果对比、Vue3 企业工作台和联调页，当前 Maven 测试 79 passed
 Docker Compose：已新增 FastAPI / Spring Boot Dockerfile、docker-compose.yml、.dockerignore 和 .env.example，支持一键启动 MySQL、Qdrant、FastAPI 和 Spring Boot
 ```
 

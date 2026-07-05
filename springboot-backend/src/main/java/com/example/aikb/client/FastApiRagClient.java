@@ -17,6 +17,7 @@ import com.example.aikb.dto.fastapi.FastApiResumeParseResponse;
 import com.example.aikb.dto.fastapi.FastApiStarInterviewAnswerRequest;
 import com.example.aikb.dto.fastapi.FastApiStarInterviewAnswerResponse;
 import com.example.aikb.exception.BusinessException;
+import com.example.aikb.service.AiCallLogService;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
@@ -27,6 +28,7 @@ import org.springframework.web.client.RestClientException;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.util.function.Supplier;
 
 /**
  * FastAPI AI 服务客户端。
@@ -44,13 +46,16 @@ public class FastApiRagClient {
 
     private final RestClient fastApiRestClient;
     private final FastApiProperties properties;
+    private final AiCallLogService aiCallLogService;
 
     public FastApiRagClient(
             RestClient fastApiRestClient,
-            FastApiProperties properties
+            FastApiProperties properties,
+            AiCallLogService aiCallLogService
     ) {
         this.fastApiRestClient = fastApiRestClient;
         this.properties = properties;
+        this.aiCallLogService = aiCallLogService;
     }
 
     /**
@@ -74,15 +79,14 @@ public class FastApiRagClient {
                 documentId
         );
 
-        try {
-            return fastApiRestClient.post()
+        return callFastApi("RAG_RERANK_CHAT", "/rag/chat/rerank", () ->
+                fastApiRestClient.post()
                     .uri("/rag/chat/rerank")
                     .body(request)
                     .retrieve()
-                    .body(FastApiRagResponse.class);
-        } catch (RestClientException exception) {
-            throw new BusinessException("调用 FastAPI RAG 服务失败", exception);
-        }
+                    .body(FastApiRagResponse.class),
+                "调用 FastAPI RAG 服务失败"
+        );
     }
 
     /**
@@ -112,16 +116,17 @@ public class FastApiRagClient {
             MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
             body.add("file", fileResource);
 
-            return fastApiRestClient.post()
+            return callFastApi("DOCUMENT_INDEX", "/documents/index", () ->
+                    fastApiRestClient.post()
                     .uri("/documents/index")
                     .contentType(MediaType.MULTIPART_FORM_DATA)
                     .body(body)
                     .retrieve()
-                    .body(FastApiDocumentIndexResponse.class);
+                    .body(FastApiDocumentIndexResponse.class),
+                    "调用 FastAPI 文档入库服务失败"
+            );
         } catch (IOException exception) {
             throw new BusinessException("读取上传文件失败", exception);
-        } catch (RestClientException exception) {
-            throw new BusinessException("调用 FastAPI 文档入库服务失败", exception);
         }
     }
 
@@ -130,43 +135,40 @@ public class FastApiRagClient {
                 resumeText,
                 jobDescription
         );
-        try {
-            return fastApiRestClient.post()
+        return callFastApi("JOB_ANALYZE", "/job/analyze", () ->
+                fastApiRestClient.post()
                     .uri("/job/analyze")
                     .body(request)
                     .retrieve()
-                    .body(FastApiJobAnalyzeResponse.class);
-        } catch (RestClientException exception) {
-            throw new BusinessException("调用 FastAPI 求职分析服务失败", exception);
-        }
+                    .body(FastApiJobAnalyzeResponse.class),
+                "调用 FastAPI 求职分析服务失败"
+        );
     }
 
     public FastApiResumeParseResponse parseResume(String resumeText) {
         FastApiResumeParseRequest request = new FastApiResumeParseRequest(resumeText);
 
-        try {
-            return fastApiRestClient.post()
+        return callFastApi("RESUME_PARSE", "/job/resume/parse", () ->
+                fastApiRestClient.post()
                     .uri("/job/resume/parse")
                     .body(request)
                     .retrieve()
-                    .body(FastApiResumeParseResponse.class);
-        } catch (RestClientException exception) {
-            throw new BusinessException("调用 FastAPI 简历结构化服务失败", exception);
-        }
+                    .body(FastApiResumeParseResponse.class),
+                "调用 FastAPI 简历结构化服务失败"
+        );
     }
 
     public FastApiJdParseResponse parseJd(String jobDescription) {
         FastApiJdParseRequest request = new FastApiJdParseRequest(jobDescription);
 
-        try {
-            return fastApiRestClient.post()
+        return callFastApi("JD_PARSE", "/job/jd/parse", () ->
+                fastApiRestClient.post()
                     .uri("/job/jd/parse")
                     .body(request)
                     .retrieve()
-                    .body(FastApiJdParseResponse.class);
-        } catch (RestClientException exception) {
-            throw new BusinessException("调用 FastAPI JD 结构化服务失败", exception);
-        }
+                    .body(FastApiJdParseResponse.class),
+                "调用 FastAPI JD 结构化服务失败"
+        );
     }
 
     public FastApiResumeOptimizeResponse optimizeResume(String resumeText, String jobDescription) {
@@ -175,15 +177,14 @@ public class FastApiRagClient {
                 jobDescription
         );
 
-        try {
-            return fastApiRestClient.post()
+        return callFastApi("RESUME_OPTIMIZE", "/job/resume/optimize", () ->
+                fastApiRestClient.post()
                     .uri("/job/resume/optimize")
                     .body(request)
                     .retrieve()
-                    .body(FastApiResumeOptimizeResponse.class);
-        } catch (RestClientException exception) {
-            throw new BusinessException("调用 FastAPI 简历优化服务失败", exception);
-        }
+                    .body(FastApiResumeOptimizeResponse.class),
+                "调用 FastAPI 简历优化服务失败"
+        );
     }
 
     public FastApiInterviewPrepResponse prepareInterview(String resumeText, String jobDescription) {
@@ -192,15 +193,14 @@ public class FastApiRagClient {
                 jobDescription
         );
 
-        try {
-            return fastApiRestClient.post()
+        return callFastApi("INTERVIEW_PREP", "/job/interview/prepare", () ->
+                fastApiRestClient.post()
                     .uri("/job/interview/prepare")
                     .body(request)
                     .retrieve()
-                    .body(FastApiInterviewPrepResponse.class);
-        } catch (RestClientException exception) {
-            throw new BusinessException("调用 FastAPI 面试准备服务失败", exception);
-        }
+                    .body(FastApiInterviewPrepResponse.class),
+                "调用 FastAPI 面试准备服务失败"
+        );
     }
 
     public FastApiStarInterviewAnswerResponse generateStarInterviewAnswer(String resumeText, String jobDescription, String question) {
@@ -210,14 +210,35 @@ public class FastApiRagClient {
                 question
         );
 
-        try {
-            return fastApiRestClient.post()
+        return callFastApi("STAR_INTERVIEW_ANSWER", "/job/interview/star-answer", () ->
+                fastApiRestClient.post()
                     .uri("/job/interview/star-answer")
                     .body(request)
                     .retrieve()
-                    .body(FastApiStarInterviewAnswerResponse.class);
+                    .body(FastApiStarInterviewAnswerResponse.class),
+                "调用 FastAPI STAR 面试答案服务失败"
+        );
+    }
+
+    private <T> T callFastApi(String businessType, String endpoint, Supplier<T> call, String failureMessage) {
+        long startedAt = System.nanoTime();
+        try {
+            T response = call.get();
+            aiCallLogService.recordFastApiCall(businessType, endpoint, true, elapsedMs(startedAt), null);
+            return response;
         } catch (RestClientException exception) {
-            throw new BusinessException("调用 FastAPI STAR 面试答案服务失败", exception);
+            aiCallLogService.recordFastApiCall(
+                    businessType,
+                    endpoint,
+                    false,
+                    elapsedMs(startedAt),
+                    exception.getMessage()
+            );
+            throw new BusinessException(failureMessage, exception);
         }
+    }
+
+    private long elapsedMs(long startedAt) {
+        return Math.max(0, (System.nanoTime() - startedAt) / 1_000_000);
     }
 }

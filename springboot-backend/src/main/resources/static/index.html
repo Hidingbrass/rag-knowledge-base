@@ -1022,31 +1022,61 @@
                 </div>
             </div>
 
-            <div class="card" style="margin-top: 16px;">
-                <div class="card-header">
-                    <h3 class="card-title">最近求职分析</h3>
-                    <button class="btn small ghost" @click="activeTab = 'jobs'">查看</button>
+            <div class="grid-2" style="margin-top: 16px;">
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">最近求职分析</h3>
+                        <button class="btn small ghost" @click="activeTab = 'jobs'">查看</button>
+                    </div>
+                    <div class="card-body">
+                        <table class="table" v-if="jobTasks.length">
+                            <thead>
+                            <tr>
+                                <th>用户</th>
+                                <th>匹配分</th>
+                                <th>创建时间</th>
+                                <th>岗位摘要</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            <tr v-for="task in jobTasks.slice(0, 5)" :key="task.id">
+                                <td>{{ task.userId }}</td>
+                                <td><span class="badge green">{{ task.matchScore }}</span></td>
+                                <td>{{ formatDate(task.createdAt) }}</td>
+                                <td class="truncate">{{ task.jobDescription }}</td>
+                            </tr>
+                            </tbody>
+                        </table>
+                        <div class="empty" v-else>暂无求职分析记录</div>
+                    </div>
                 </div>
-                <div class="card-body">
-                    <table class="table" v-if="jobTasks.length">
-                        <thead>
-                        <tr>
-                            <th>用户</th>
-                            <th>匹配分</th>
-                            <th>创建时间</th>
-                            <th>岗位摘要</th>
-                        </tr>
-                        </thead>
-                        <tbody>
-                        <tr v-for="task in jobTasks.slice(0, 5)" :key="task.id">
-                            <td>{{ task.userId }}</td>
-                            <td><span class="badge green">{{ task.matchScore }}</span></td>
-                            <td>{{ formatDate(task.createdAt) }}</td>
-                            <td class="truncate">{{ task.jobDescription }}</td>
-                        </tr>
-                        </tbody>
-                    </table>
-                    <div class="empty" v-else>暂无求职分析记录</div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">最近 AI 调用</h3>
+                        <button class="btn small ghost" @click="loadAiCallLogs">刷新</button>
+                    </div>
+                    <div class="card-body">
+                        <table class="table" v-if="aiCallLogs.length">
+                            <thead>
+                            <tr>
+                                <th>业务</th>
+                                <th>接口</th>
+                                <th>耗时</th>
+                                <th>状态</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            <tr v-for="log in aiCallLogs.slice(0, 5)" :key="log.id">
+                                <td>{{ log.businessType }}</td>
+                                <td class="truncate">{{ log.endpoint }}</td>
+                                <td>{{ log.elapsedMs }} ms</td>
+                                <td><span class="badge" :class="log.success ? 'green' : 'red'">{{ log.success ? "成功" : "失败" }}</span></td>
+                            </tr>
+                            </tbody>
+                        </table>
+                        <div class="empty" v-else>暂无 AI 调用日志</div>
+                    </div>
                 </div>
             </div>
         </section>
@@ -2142,6 +2172,7 @@ window.__aikbApp = createApp({
             documents: [],
             sessions: [],
             messages: [],
+            aiCallLogs: [],
             jobTasks: [],
             jobFavorites: [],
             jobGeneratedTasks: [],
@@ -2335,9 +2366,21 @@ window.__aikbApp = createApp({
                 await this.loadJobFavorites(false, 0);
                 await this.loadJobGeneratedTasks(false, 0);
                 await this.loadResumeVersions(false, 0);
+                await this.loadAiCallLogs(false);
                 this.setStatus("数据已同步。");
             } catch (error) {
                 this.setStatus(`同步失败：${error.message}`);
+            }
+        },
+        async loadAiCallLogs(showStatus = true) {
+            try {
+                this.aiCallLogs = await this.requestJson("/api/ai-call-logs/recent");
+                if (showStatus) {
+                    this.setStatus(`已加载 ${this.aiCallLogs.length} 条 AI 调用日志。`);
+                }
+            } catch (error) {
+                this.aiCallLogs = [];
+                this.setStatus(`读取 AI 调用日志失败：${error.message}`);
             }
         },
         async checkHealth() {
