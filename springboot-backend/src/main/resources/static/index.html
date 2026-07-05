@@ -307,6 +307,11 @@
             align-items: center;
         }
 
+        .toolbar .select.compact {
+            width: auto;
+            min-width: 148px;
+        }
+
         .pagination {
             display: flex;
             justify-content: flex-end;
@@ -547,6 +552,34 @@
 
         .job-section li + li {
             margin-top: 4px;
+        }
+
+        .history-detail {
+            display: grid;
+            gap: 10px;
+            margin-top: 14px;
+            padding-top: 14px;
+            border-top: 1px solid var(--line);
+        }
+
+        .history-detail-head {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            align-items: flex-start;
+        }
+
+        .history-detail-title {
+            min-width: 0;
+            color: #344054;
+            font-weight: 700;
+            line-height: 1.5;
+        }
+
+        .history-detail-meta {
+            margin-top: 4px;
+            color: var(--muted);
+            font-size: 12px;
         }
 
         .compare-dashboard {
@@ -1801,7 +1834,15 @@
             <div class="card" style="margin-top: 16px;">
                 <div class="card-header">
                     <h3 class="card-title">生成历史</h3>
-                    <span class="badge">{{ jobPages.generatedTasks.totalElements }}</span>
+                    <div class="toolbar">
+                        <select class="select compact" v-model="generatedTaskFilter" @change="onGeneratedTaskFilterChange">
+                            <option value="">全部类型</option>
+                            <option value="RESUME_OPTIMIZE">简历优化</option>
+                            <option value="INTERVIEW_PREP">面试准备</option>
+                            <option value="STAR_INTERVIEW_ANSWER">STAR 答案</option>
+                        </select>
+                        <span class="badge">{{ jobPages.generatedTasks.totalElements }}</span>
+                    </div>
                 </div>
                 <div class="card-body">
                     <table class="table" v-if="jobGeneratedTasks.length">
@@ -1832,6 +1873,31 @@
                         <button class="btn small ghost" @click="loadJobGeneratedTasks(true, jobPages.generatedTasks.page - 1)" :disabled="jobPages.generatedTasks.first">上一页</button>
                         <span>第 {{ jobPages.generatedTasks.page + 1 }} / {{ pageTotal(jobPages.generatedTasks) }} 页 · 共 {{ jobPages.generatedTasks.totalElements }} 条历史</span>
                         <button class="btn small ghost" @click="loadJobGeneratedTasks(true, jobPages.generatedTasks.page + 1)" :disabled="jobPages.generatedTasks.last">下一页</button>
+                    </div>
+                    <div class="history-detail" v-if="selectedGeneratedTask">
+                        <div class="history-detail-head">
+                            <div class="history-detail-title">
+                                {{ jobGeneratedTaskTypeLabel(selectedGeneratedTask.taskType) }}历史详情
+                                <div class="history-detail-meta">
+                                    {{ formatDate(selectedGeneratedTask.createdAt) }} · {{ selectedGeneratedTask.id }}
+                                </div>
+                            </div>
+                            <span class="badge green">{{ jobGeneratedTaskTypeLabel(selectedGeneratedTask.taskType) }}</span>
+                        </div>
+                        <div class="job-result-grid">
+                            <div class="job-section">
+                                <h4>简历摘要</h4>
+                                <p>{{ selectedGeneratedTask.resumeText || "暂无" }}</p>
+                            </div>
+                            <div class="job-section">
+                                <h4>岗位摘要</h4>
+                                <p>{{ selectedGeneratedTask.jobDescription || "暂无" }}</p>
+                            </div>
+                        </div>
+                        <details class="job-raw">
+                            <summary>查看该历史原始 JSON</summary>
+                            <pre>{{ selectedGeneratedTaskResultText }}</pre>
+                        </details>
                     </div>
                 </div>
             </div>
@@ -2080,6 +2146,8 @@ window.__aikbApp = createApp({
             jobFavorites: [],
             jobGeneratedTasks: [],
             jobResumeVersions: [],
+            generatedTaskFilter: "",
+            selectedGeneratedTask: null,
             jobPages: {
                 tasks: {page: 0, size: 10, totalElements: 0, totalPages: 0, first: true, last: true},
                 generatedTasks: {page: 0, size: 10, totalElements: 0, totalPages: 0, first: true, last: true},
@@ -2184,6 +2252,12 @@ window.__aikbApp = createApp({
         },
         starInterviewAnswerResultText() {
             return this.starInterviewAnswerResult ? JSON.stringify(this.starInterviewAnswerResult, null, 2) : "暂无 STAR 面试答案";
+        },
+        selectedGeneratedTaskResultText() {
+            if (!this.selectedGeneratedTask) {
+                return "暂无生成历史详情";
+            }
+            return JSON.stringify(this.parseJsonObject(this.selectedGeneratedTask.resultJson), null, 2);
         }
     },
     mounted() {
@@ -2198,6 +2272,12 @@ window.__aikbApp = createApp({
         },
         jobPageQuery(pageInfo) {
             return `${this.jobUserQuery()}&page=${encodeURIComponent(pageInfo.page)}&size=${encodeURIComponent(pageInfo.size)}`;
+        },
+        generatedTaskPageQuery() {
+            const query = this.jobPageQuery(this.jobPages.generatedTasks);
+            return this.generatedTaskFilter
+                ? `${query}&taskType=${encodeURIComponent(this.generatedTaskFilter)}`
+                : query;
         },
         applyJobPage(pageKey, targetKey, pageData) {
             this[targetKey] = pageData.content || [];
@@ -2224,6 +2304,13 @@ window.__aikbApp = createApp({
         },
         pageTotal(pageInfo) {
             return Math.max(Number(pageInfo.totalPages || 0), 1);
+        },
+        parseJsonObject(jsonText) {
+            try {
+                return JSON.parse(jsonText || "{}");
+            } catch (error) {
+                return {};
+            }
         },
         setStatus(message) {
             this.statusMessage = message;
@@ -2457,6 +2544,7 @@ window.__aikbApp = createApp({
                     })
                 });
                 this.resumeOptimizeResult = data;
+                this.generatedTaskFilter = "RESUME_OPTIMIZE";
                 await this.loadJobGeneratedTasks(false, 0);
                 this.setStatus(`简历优化完成，生成 ${this.normalizeResumeOptimizeResult(data)?.rewriteSuggestions.length ?? 0} 条改写建议。`);
             } catch (error) {
@@ -2475,6 +2563,7 @@ window.__aikbApp = createApp({
                     })
                 });
                 this.interviewPrepResult = data;
+                this.generatedTaskFilter = "INTERVIEW_PREP";
                 await this.loadJobGeneratedTasks(false, 0);
                 this.setStatus(`面试准备包生成完成，包含 ${this.normalizeInterviewPrepResult(data)?.technicalQuestions.length ?? 0} 个技术追问。`);
             } catch (error) {
@@ -2494,6 +2583,7 @@ window.__aikbApp = createApp({
                     })
                 });
                 this.starInterviewAnswerResult = data;
+                this.generatedTaskFilter = "STAR_INTERVIEW_ANSWER";
                 await this.loadJobGeneratedTasks(false, 0);
                 this.setStatus(`STAR 答案生成完成，包含 ${this.normalizeStarInterviewAnswerResult(data)?.action.length ?? 0} 条行动要点。`);
             } catch (error) {
@@ -2540,24 +2630,35 @@ window.__aikbApp = createApp({
         async loadJobGeneratedTasks(showStatus = true, page = this.jobPages.generatedTasks.page) {
             if (!this.identity.userId) {
                 this.resetJobPage("generatedTasks", "jobGeneratedTasks");
+                this.selectedGeneratedTask = null;
                 return;
             }
             this.jobPages.generatedTasks.page = Math.max(0, page);
             try {
-                const pageData = await this.requestJson(`/api/job-agent/generated-tasks/page?${this.jobPageQuery(this.jobPages.generatedTasks)}`);
+                const pageData = await this.requestJson(`/api/job-agent/generated-tasks/page?${this.generatedTaskPageQuery()}`);
                 this.applyJobPage("generatedTasks", "jobGeneratedTasks", pageData);
+                if (this.selectedGeneratedTask && !this.jobGeneratedTasks.some(task => task.id === this.selectedGeneratedTask.id)) {
+                    this.selectedGeneratedTask = null;
+                }
                 if (showStatus) {
-                    this.setStatus(`已加载第 ${this.jobPages.generatedTasks.page + 1} 页生成历史，共 ${this.jobPages.generatedTasks.totalElements} 条。`);
+                    const filterLabel = this.generatedTaskFilter ? this.jobGeneratedTaskTypeLabel(this.generatedTaskFilter) : "全部";
+                    this.setStatus(`已加载第 ${this.jobPages.generatedTasks.page + 1} 页${filterLabel}生成历史，共 ${this.jobPages.generatedTasks.totalElements} 条。`);
                 }
             } catch (error) {
                 this.resetJobPage("generatedTasks", "jobGeneratedTasks");
+                this.selectedGeneratedTask = null;
                 this.setStatus(`读取生成历史失败：${error.message}`);
             }
+        },
+        async onGeneratedTaskFilterChange() {
+            this.selectedGeneratedTask = null;
+            await this.loadJobGeneratedTasks(true, 0);
         },
         async viewJobGeneratedTask(taskId) {
             try {
                 const task = await this.requestJson(`/api/job-agent/generated-tasks/${encodeURIComponent(taskId)}?${this.jobUserQuery()}`);
-                const result = JSON.parse(task.resultJson || "{}");
+                const result = this.parseJsonObject(task.resultJson);
+                this.selectedGeneratedTask = task;
                 this.jobForm.resumeText = task.resumeText || this.jobForm.resumeText;
                 this.jobForm.jobDescription = task.jobDescription || this.jobForm.jobDescription;
                 if (task.taskType === "RESUME_OPTIMIZE") {
@@ -2583,6 +2684,9 @@ window.__aikbApp = createApp({
                 await this.requestJson(`/api/job-agent/generated-tasks/${encodeURIComponent(taskId)}?${this.jobUserQuery()}`, {
                     method: "DELETE"
                 });
+                if (this.selectedGeneratedTask?.id === taskId) {
+                    this.selectedGeneratedTask = null;
+                }
                 await this.loadJobGeneratedTasks(false);
                 this.setStatus("生成历史已删除。");
             } catch (error) {
