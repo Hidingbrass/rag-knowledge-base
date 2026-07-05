@@ -307,6 +307,20 @@
             align-items: center;
         }
 
+        .pagination {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 8px;
+            margin-top: 12px;
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .pagination .btn {
+            min-width: 64px;
+        }
+
         .table {
             width: 100%;
             border-collapse: collapse;
@@ -882,7 +896,7 @@
                 <span>RAG 问答</span><span class="nav-count">{{ messages.length }}</span>
             </button>
             <button :class="{active: activeTab === 'jobs'}" @click="activeTab = 'jobs'">
-                <span>求职 Agent</span><span class="nav-count">{{ jobTasks.length }}</span>
+                <span>求职 Agent</span><span class="nav-count">{{ jobPages.tasks.totalElements }}</span>
             </button>
         </nav>
 
@@ -1746,7 +1760,7 @@
             <div class="card" style="margin-top: 16px;">
                 <div class="card-header">
                     <h3 class="card-title">简历版本</h3>
-                    <span class="badge">{{ jobResumeVersions.length }}</span>
+                    <span class="badge">{{ jobPages.resumeVersions.totalElements }}</span>
                 </div>
                 <div class="card-body">
                     <table class="table" v-if="jobResumeVersions.length">
@@ -1776,13 +1790,18 @@
                         </tbody>
                     </table>
                     <div class="empty" v-else>暂无简历版本</div>
+                    <div class="pagination">
+                        <button class="btn small ghost" @click="loadResumeVersions(true, jobPages.resumeVersions.page - 1)" :disabled="jobPages.resumeVersions.first">上一页</button>
+                        <span>第 {{ jobPages.resumeVersions.page + 1 }} / {{ pageTotal(jobPages.resumeVersions) }} 页 · 共 {{ jobPages.resumeVersions.totalElements }} 个版本</span>
+                        <button class="btn small ghost" @click="loadResumeVersions(true, jobPages.resumeVersions.page + 1)" :disabled="jobPages.resumeVersions.last">下一页</button>
+                    </div>
                 </div>
             </div>
 
             <div class="card" style="margin-top: 16px;">
                 <div class="card-header">
                     <h3 class="card-title">生成历史</h3>
-                    <span class="badge">{{ jobGeneratedTasks.length }}</span>
+                    <span class="badge">{{ jobPages.generatedTasks.totalElements }}</span>
                 </div>
                 <div class="card-body">
                     <table class="table" v-if="jobGeneratedTasks.length">
@@ -1809,13 +1828,18 @@
                         </tbody>
                     </table>
                     <div class="empty" v-else>暂无生成历史</div>
+                    <div class="pagination">
+                        <button class="btn small ghost" @click="loadJobGeneratedTasks(true, jobPages.generatedTasks.page - 1)" :disabled="jobPages.generatedTasks.first">上一页</button>
+                        <span>第 {{ jobPages.generatedTasks.page + 1 }} / {{ pageTotal(jobPages.generatedTasks) }} 页 · 共 {{ jobPages.generatedTasks.totalElements }} 条历史</span>
+                        <button class="btn small ghost" @click="loadJobGeneratedTasks(true, jobPages.generatedTasks.page + 1)" :disabled="jobPages.generatedTasks.last">下一页</button>
+                    </div>
                 </div>
             </div>
 
             <div class="card" style="margin-top: 16px;">
                 <div class="card-header">
                     <h3 class="card-title">岗位收藏</h3>
-                    <span class="badge">{{ jobFavorites.length }}</span>
+                    <span class="badge">{{ jobPages.favorites.totalElements }}</span>
                 </div>
                 <div class="card-body">
                     <table class="table" v-if="jobFavorites.length">
@@ -1844,6 +1868,11 @@
                         </tbody>
                     </table>
                     <div class="empty" v-else>暂无收藏岗位</div>
+                    <div class="pagination">
+                        <button class="btn small ghost" @click="loadJobFavorites(true, jobPages.favorites.page - 1)" :disabled="jobPages.favorites.first">上一页</button>
+                        <span>第 {{ jobPages.favorites.page + 1 }} / {{ pageTotal(jobPages.favorites) }} 页 · 共 {{ jobPages.favorites.totalElements }} 个岗位</span>
+                        <button class="btn small ghost" @click="loadJobFavorites(true, jobPages.favorites.page + 1)" :disabled="jobPages.favorites.last">下一页</button>
+                    </div>
                 </div>
             </div>
 
@@ -1945,7 +1974,7 @@
                 <div class="card-header">
                     <h3 class="card-title">分析历史</h3>
                     <div class="toolbar">
-                        <span class="badge">{{ jobTasks.length }}</span>
+                        <span class="badge">{{ jobPages.tasks.totalElements }}</span>
                         <button class="btn small ghost" @click="compareSelectedJobTasks">对比选中</button>
                     </div>
                 </div>
@@ -1978,6 +2007,11 @@
                         </tbody>
                     </table>
                     <div class="empty" v-else>暂无求职分析历史</div>
+                    <div class="pagination">
+                        <button class="btn small ghost" @click="loadJobTasks(true, jobPages.tasks.page - 1)" :disabled="jobPages.tasks.first">上一页</button>
+                        <span>第 {{ jobPages.tasks.page + 1 }} / {{ pageTotal(jobPages.tasks) }} 页 · 共 {{ jobPages.tasks.totalElements }} 条分析</span>
+                        <button class="btn small ghost" @click="loadJobTasks(true, jobPages.tasks.page + 1)" :disabled="jobPages.tasks.last">下一页</button>
+                    </div>
                 </div>
             </div>
         </section>
@@ -2046,6 +2080,12 @@ window.__aikbApp = createApp({
             jobFavorites: [],
             jobGeneratedTasks: [],
             jobResumeVersions: [],
+            jobPages: {
+                tasks: {page: 0, size: 10, totalElements: 0, totalPages: 0, first: true, last: true},
+                generatedTasks: {page: 0, size: 10, totalElements: 0, totalPages: 0, first: true, last: true},
+                resumeVersions: {page: 0, size: 10, totalElements: 0, totalPages: 0, first: true, last: true},
+                favorites: {page: 0, size: 10, totalElements: 0, totalPages: 0, first: true, last: true}
+            },
             selectedCompareTaskIds: [],
             selectedKnowledgeBaseId: "",
             selectedSessionId: "",
@@ -2156,6 +2196,35 @@ window.__aikbApp = createApp({
         jobUserQuery() {
             return `userId=${encodeURIComponent(this.identity.userId)}`;
         },
+        jobPageQuery(pageInfo) {
+            return `${this.jobUserQuery()}&page=${encodeURIComponent(pageInfo.page)}&size=${encodeURIComponent(pageInfo.size)}`;
+        },
+        applyJobPage(pageKey, targetKey, pageData) {
+            this[targetKey] = pageData.content || [];
+            this.jobPages[pageKey] = {
+                ...this.jobPages[pageKey],
+                page: pageData.page ?? 0,
+                size: pageData.size ?? this.jobPages[pageKey].size,
+                totalElements: pageData.totalElements ?? 0,
+                totalPages: pageData.totalPages ?? 0,
+                first: pageData.first ?? true,
+                last: pageData.last ?? true
+            };
+        },
+        resetJobPage(pageKey, targetKey) {
+            this[targetKey] = [];
+            this.jobPages[pageKey] = {
+                ...this.jobPages[pageKey],
+                page: 0,
+                totalElements: 0,
+                totalPages: 0,
+                first: true,
+                last: true
+            };
+        },
+        pageTotal(pageInfo) {
+            return Math.max(Number(pageInfo.totalPages || 0), 1);
+        },
         setStatus(message) {
             this.statusMessage = message;
         },
@@ -2175,10 +2244,10 @@ window.__aikbApp = createApp({
             try {
                 await this.loadKnowledgeBases();
                 await this.loadSessions();
-                await this.loadJobTasks(false);
-                await this.loadJobFavorites(false);
-                await this.loadJobGeneratedTasks(false);
-                await this.loadResumeVersions(false);
+                await this.loadJobTasks(false, 0);
+                await this.loadJobFavorites(false, 0);
+                await this.loadJobGeneratedTasks(false, 0);
+                await this.loadResumeVersions(false, 0);
                 this.setStatus("数据已同步。");
             } catch (error) {
                 this.setStatus(`同步失败：${error.message}`);
@@ -2388,7 +2457,7 @@ window.__aikbApp = createApp({
                     })
                 });
                 this.resumeOptimizeResult = data;
-                await this.loadJobGeneratedTasks(false);
+                await this.loadJobGeneratedTasks(false, 0);
                 this.setStatus(`简历优化完成，生成 ${this.normalizeResumeOptimizeResult(data)?.rewriteSuggestions.length ?? 0} 条改写建议。`);
             } catch (error) {
                 this.setStatus(`简历优化失败：${error.message}`);
@@ -2406,7 +2475,7 @@ window.__aikbApp = createApp({
                     })
                 });
                 this.interviewPrepResult = data;
-                await this.loadJobGeneratedTasks(false);
+                await this.loadJobGeneratedTasks(false, 0);
                 this.setStatus(`面试准备包生成完成，包含 ${this.normalizeInterviewPrepResult(data)?.technicalQuestions.length ?? 0} 个技术追问。`);
             } catch (error) {
                 this.setStatus(`面试准备失败：${error.message}`);
@@ -2425,7 +2494,7 @@ window.__aikbApp = createApp({
                     })
                 });
                 this.starInterviewAnswerResult = data;
-                await this.loadJobGeneratedTasks(false);
+                await this.loadJobGeneratedTasks(false, 0);
                 this.setStatus(`STAR 答案生成完成，包含 ${this.normalizeStarInterviewAnswerResult(data)?.action.length ?? 0} 条行动要点。`);
             } catch (error) {
                 this.setStatus(`生成 STAR 答案失败：${error.message}`);
@@ -2443,39 +2512,45 @@ window.__aikbApp = createApp({
                     })
                 });
                 this.jobResult = data;
-                await this.loadJobTasks(false);
+                await this.loadJobTasks(false, 0);
                 this.setStatus(`求职分析完成，匹配分：${data.match_score ?? data.matchScore ?? "-"}`);
             } catch (error) {
                 this.setStatus(`求职分析失败：${error.message}`);
             }
         },
-        async loadJobTasks(showStatus = true) {
+        async loadJobTasks(showStatus = true, page = this.jobPages.tasks.page) {
             if (!this.identity.userId) {
-                this.jobTasks = [];
+                this.resetJobPage("tasks", "jobTasks");
                 return;
             }
+            this.jobPages.tasks.page = Math.max(0, page);
             try {
-                this.jobTasks = await this.requestJson(`/api/job-agent/tasks?${this.jobUserQuery()}`);
+                const pageData = await this.requestJson(`/api/job-agent/tasks/page?${this.jobPageQuery(this.jobPages.tasks)}`);
+                this.applyJobPage("tasks", "jobTasks", pageData);
+                const visibleTaskIds = new Set(this.jobTasks.map(task => task.id));
+                this.selectedCompareTaskIds = this.selectedCompareTaskIds.filter(id => visibleTaskIds.has(id));
                 if (showStatus) {
-                    this.setStatus(`已加载 ${this.jobTasks.length} 条求职分析历史。`);
+                    this.setStatus(`已加载第 ${this.jobPages.tasks.page + 1} 页求职分析历史，共 ${this.jobPages.tasks.totalElements} 条。`);
                 }
             } catch (error) {
-                this.jobTasks = [];
+                this.resetJobPage("tasks", "jobTasks");
                 this.setStatus(`读取求职分析历史失败：${error.message}`);
             }
         },
-        async loadJobGeneratedTasks(showStatus = true) {
+        async loadJobGeneratedTasks(showStatus = true, page = this.jobPages.generatedTasks.page) {
             if (!this.identity.userId) {
-                this.jobGeneratedTasks = [];
+                this.resetJobPage("generatedTasks", "jobGeneratedTasks");
                 return;
             }
+            this.jobPages.generatedTasks.page = Math.max(0, page);
             try {
-                this.jobGeneratedTasks = await this.requestJson(`/api/job-agent/generated-tasks?${this.jobUserQuery()}`);
+                const pageData = await this.requestJson(`/api/job-agent/generated-tasks/page?${this.jobPageQuery(this.jobPages.generatedTasks)}`);
+                this.applyJobPage("generatedTasks", "jobGeneratedTasks", pageData);
                 if (showStatus) {
-                    this.setStatus(`已加载 ${this.jobGeneratedTasks.length} 条生成历史。`);
+                    this.setStatus(`已加载第 ${this.jobPages.generatedTasks.page + 1} 页生成历史，共 ${this.jobPages.generatedTasks.totalElements} 条。`);
                 }
             } catch (error) {
-                this.jobGeneratedTasks = [];
+                this.resetJobPage("generatedTasks", "jobGeneratedTasks");
                 this.setStatus(`读取生成历史失败：${error.message}`);
             }
         },
@@ -2527,24 +2602,26 @@ window.__aikbApp = createApp({
                         notes: this.jobResumeVersionForm.notes
                     })
                 });
-                await this.loadResumeVersions(false);
+                await this.loadResumeVersions(false, 0);
                 this.setStatus(`简历版本已保存：${data.versionName}`);
             } catch (error) {
                 this.setStatus(`保存简历版本失败：${error.message}`);
             }
         },
-        async loadResumeVersions(showStatus = true) {
+        async loadResumeVersions(showStatus = true, page = this.jobPages.resumeVersions.page) {
             if (!this.identity.userId) {
-                this.jobResumeVersions = [];
+                this.resetJobPage("resumeVersions", "jobResumeVersions");
                 return;
             }
+            this.jobPages.resumeVersions.page = Math.max(0, page);
             try {
-                this.jobResumeVersions = await this.requestJson(`/api/job-agent/resume-versions?${this.jobUserQuery()}`);
+                const pageData = await this.requestJson(`/api/job-agent/resume-versions/page?${this.jobPageQuery(this.jobPages.resumeVersions)}`);
+                this.applyJobPage("resumeVersions", "jobResumeVersions", pageData);
                 if (showStatus) {
-                    this.setStatus(`已加载 ${this.jobResumeVersions.length} 个简历版本。`);
+                    this.setStatus(`已加载第 ${this.jobPages.resumeVersions.page + 1} 页简历版本，共 ${this.jobPages.resumeVersions.totalElements} 个。`);
                 }
             } catch (error) {
-                this.jobResumeVersions = [];
+                this.resetJobPage("resumeVersions", "jobResumeVersions");
                 this.setStatus(`读取简历版本失败：${error.message}`);
             }
         },
@@ -2602,24 +2679,26 @@ window.__aikbApp = createApp({
                         notes: this.jobFavoriteForm.notes
                     })
                 });
-                await this.loadJobFavorites(false);
+                await this.loadJobFavorites(false, 0);
                 this.setStatus(`岗位已收藏：${data.jobTitle}`);
             } catch (error) {
                 this.setStatus(`收藏岗位失败：${error.message}`);
             }
         },
-        async loadJobFavorites(showStatus = true) {
+        async loadJobFavorites(showStatus = true, page = this.jobPages.favorites.page) {
             if (!this.identity.userId) {
-                this.jobFavorites = [];
+                this.resetJobPage("favorites", "jobFavorites");
                 return;
             }
+            this.jobPages.favorites.page = Math.max(0, page);
             try {
-                this.jobFavorites = await this.requestJson(`/api/job-agent/favorites?${this.jobUserQuery()}`);
+                const pageData = await this.requestJson(`/api/job-agent/favorites/page?${this.jobPageQuery(this.jobPages.favorites)}`);
+                this.applyJobPage("favorites", "jobFavorites", pageData);
                 if (showStatus) {
-                    this.setStatus(`已加载 ${this.jobFavorites.length} 个收藏岗位。`);
+                    this.setStatus(`已加载第 ${this.jobPages.favorites.page + 1} 页收藏岗位，共 ${this.jobPages.favorites.totalElements} 个。`);
                 }
             } catch (error) {
-                this.jobFavorites = [];
+                this.resetJobPage("favorites", "jobFavorites");
                 this.setStatus(`读取收藏岗位失败：${error.message}`);
             }
         },
