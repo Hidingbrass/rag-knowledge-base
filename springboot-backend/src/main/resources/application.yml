@@ -13,14 +13,20 @@ spring:
     driver-class-name: com.mysql.cj.jdbc.Driver
   jpa:
     hibernate:
-      # 学习项目先用 update，让 Hibernate 根据 Entity 自动更新表结构。
-      # 正式生产环境一般改用 Flyway/Liquibase 管理数据库版本。
-      ddl-auto: update
+      # 表结构交给 Flyway 版本化管理，Hibernate 只校验 Entity 和数据库是否一致。
+      ddl-auto: validate
     show-sql: false
     open-in-view: false
     properties:
       hibernate:
         format_sql: true
+        type:
+          preferred_uuid_jdbc_type: BINARY
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    # 本地旧库如果已经被 Hibernate 自动建过表，首次接入 Flyway 时可以建立基线。
+    baseline-on-migrate: true
 
 fastapi:
   # FastAPI AI 服务地址。以后用 Docker Compose 内部通信时可以改成 http://api:8000。

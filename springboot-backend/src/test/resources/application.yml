@@ -7,7 +7,14 @@ spring:
     driver-class-name: org.h2.Driver
   jpa:
     hibernate:
-      # 每次测试自动建表，测试结束自动清理。
-      ddl-auto: create-drop
+      # 测试也走 Flyway 建表，避免生产表结构和测试表结构两套逻辑。
+      ddl-auto: validate
     show-sql: false
     open-in-view: false
+    properties:
+      hibernate:
+        type:
+          preferred_uuid_jdbc_type: BINARY
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
