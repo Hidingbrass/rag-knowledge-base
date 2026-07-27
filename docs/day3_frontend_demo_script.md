@@ -138,21 +138,21 @@ http://127.0.0.1:8080/index.html
 操作：
 
 ```text
-点击“切换为 owner：user-1 / 研发部”
+注册或登录研发部账号
 ```
 
 预期结果：
 
 ```text
-页面重新加载当前用户可见的数据。
-状态区 currentUser 显示 user-1 / 研发部。
+页面重新加载当前 JWT 用户可见的数据。
+状态区显示当前登录账号和学习方向。
 ```
 
 你可以这样讲：
 
 ```text
-当前学习版用 userId + department 模拟登录用户。
-真实项目里这两个字段会来自 JWT 或 Spring Security 的登录上下文。
+当前版本已接入 Spring Security + JWT，身份来自登录上下文。
+只有显式开启 legacy 演示模式时，旧版联调页才接受 userId + department 参数。
 ```
 
 ### 第三步：创建或选择知识库
@@ -320,26 +320,26 @@ vector_score 表示向量检索阶段的相似度，rerank_score 表示 Rerank �
 允许访问。
 ```
 
-### 同部门用户
+### 同学习方向的非 owner 用户
 
 操作：
 
 ```text
-切换为 user-2 / 研发部。
-查看同一个知识库的文档和消息。
+切换为 user-2 / 研发部（这里的“研发部”是旧字段，产品上表示学习方向）。
+尝试查看 user-1 知识库的文档和消息。
 ```
 
 预期结果：
 
 ```text
-允许访问。
+页面显示无权访问，后端返回 HTTP 403。
 ```
 
 你可以这样讲：
 
 ```text
-当前权限规则是 owner 或同部门用户可以访问。
-这对应企业知识库中常见的部门资料共享场景。
+当前权限规则是个人知识库仅 owner 可以访问。
+即使学习方向相同，也不会默认共享用户上传的学习资料和聊天记录。
 ```
 
 ### 无权限用户
@@ -362,7 +362,7 @@ vector_score 表示向量检索阶段的相似度，rerank_score 表示 Rerank �
 
 ```text
 权限校验必须放在 Spring Boot 后端，而不是只靠前端隐藏按钮。
-即使用户手动构造请求，后端仍然会校验知识库 owner、department 和 documentId 归属。
+即使用户手动构造请求，后端仍然会校验知识库 owner 和 documentId 归属；department 不参与授权。
 ```
 
 ## 5. 失败场景怎么讲
@@ -421,7 +421,7 @@ RAG 提问时需要后者来限制检索范围。
 这个项目是一个企业智能知识库系统。
 整体采用 Spring Boot + FastAPI 双服务架构。
 Spring Boot 负责企业业务，包括知识库、文档状态、用户权限、聊天会话和 MySQL 持久化。
-FastAPI 负责 AI 能力，包括 PDF 解析、文本切分、Embedding、Qdrant 向量检索、Hybrid 检索、qwen3-rerank 和通义千问生成回答。
+FastAPI 负责 AI 能力，包括 PDF 解析、文本切分、Dense/Sparse 命名向量、Qdrant RRF Hybrid 检索、qwen3-rerank 和通义千问生成回答。
 
 用户在页面上传 PDF 后，Spring Boot 会先做权限校验、PDF 校验和文件 hash 重复检测。
 如果不是重复文档，就调用 FastAPI 完成向量入库，并把 FastAPI 返回的 document_id 保存到 MySQL。
@@ -488,7 +488,7 @@ Day 3 可以视为完成，如果满足：
 - 可以上传 PDF 并看到 `AVAILABLE` 或 `FAILED`。
 - 可以创建会话并发送 RAG 问题。
 - 可以看到聊天记录和引用来源。
-- 可以切换 owner、同部门、无权限用户验证权限。
+- 可以切换 owner、同学习方向非 owner、不同学习方向非 owner 验证 owner-only 权限。
 - `/index.html` 和 `/favicon.ico` 有测试保护。
 
 当前代码已经覆盖这些点。

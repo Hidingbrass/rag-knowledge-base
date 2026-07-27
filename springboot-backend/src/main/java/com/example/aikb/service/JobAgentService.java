@@ -4,17 +4,22 @@ import com.example.aikb.client.FastApiRagClient;
 import com.example.aikb.common.PageResponse;
 import com.example.aikb.dto.fastapi.FastApiInterviewPrepResponse;
 import com.example.aikb.dto.fastapi.FastApiJdParseResponse;
+import com.example.aikb.dto.fastapi.FastApiJobAttachmentTextResponse;
 import com.example.aikb.dto.fastapi.FastApiJobAnalyzeResponse;
+import com.example.aikb.dto.fastapi.FastApiJobDeliveryPackageResponse;
 import com.example.aikb.dto.fastapi.FastApiResumeOptimizeResponse;
 import com.example.aikb.dto.fastapi.FastApiResumeParseResponse;
 import com.example.aikb.dto.fastapi.FastApiStarInterviewAnswerResponse;
 import com.example.aikb.dto.job.InterviewPrepRequest;
 import com.example.aikb.dto.job.JdParseRequest;
 import com.example.aikb.dto.job.JobAnalysisTaskResponse;
+import com.example.aikb.dto.job.JobAnalyzeFromFileResponse;
 import com.example.aikb.dto.job.JobAnalyzeRequest;
+import com.example.aikb.dto.job.JobDeliveryPackageRequest;
 import com.example.aikb.dto.job.JobFavoriteRequest;
 import com.example.aikb.dto.job.JobFavoriteResponse;
 import com.example.aikb.dto.job.JobGeneratedTaskResponse;
+import com.example.aikb.dto.job.JobGeneratedTaskReviewRequest;
 import com.example.aikb.dto.job.JobResumeVersionRequest;
 import com.example.aikb.dto.job.JobResumeVersionResponse;
 import com.example.aikb.dto.job.JobTaskCompareItem;
@@ -27,7 +32,9 @@ import com.example.aikb.entity.JobAnalysisTask;
 import com.example.aikb.entity.JobFavorite;
 import com.example.aikb.entity.JobGeneratedTask;
 import com.example.aikb.entity.JobGeneratedTaskType;
+import com.example.aikb.entity.JobReviewStatus;
 import com.example.aikb.entity.JobResumeVersion;
+import com.example.aikb.entity.JobTaskStatus;
 import com.example.aikb.exception.BusinessException;
 import com.example.aikb.exception.ForbiddenException;
 import com.example.aikb.repository.JobAnalysisTaskRepository;
@@ -39,6 +46,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -66,6 +74,7 @@ public class JobAgentService {
     private final JobFavoriteRepository jobFavoriteRepository;
     private final JobGeneratedTaskRepository jobGeneratedTaskRepository;
     private final JobResumeVersionRepository jobResumeVersionRepository;
+    private final AiRateLimitService aiRateLimitService;
     private final ObjectMapper objectMapper;
 
     public JobAgentService(
@@ -74,6 +83,7 @@ public class JobAgentService {
             JobFavoriteRepository jobFavoriteRepository,
             JobGeneratedTaskRepository jobGeneratedTaskRepository,
             JobResumeVersionRepository jobResumeVersionRepository,
+            AiRateLimitService aiRateLimitService,
             ObjectMapper objectMapper
     ) {
         this.fastApiRagClient = fastApiRagClient;
@@ -81,11 +91,13 @@ public class JobAgentService {
         this.jobFavoriteRepository = jobFavoriteRepository;
         this.jobGeneratedTaskRepository = jobGeneratedTaskRepository;
         this.jobResumeVersionRepository = jobResumeVersionRepository;
+        this.aiRateLimitService = aiRateLimitService;
         this.objectMapper = objectMapper;
     }
 
     public FastApiJobAnalyzeResponse analyze(JobAnalyzeRequest request) {
         String userId = requireUserId(request.userId());
+        aiRateLimitService.checkAiCallAllowed(userId, "JOB_ANALYZE");
         FastApiJobAnalyzeResponse response = fastApiRagClient.analyzeJob(
                 request.resumeText(),
                 request.jobDescription()
@@ -102,6 +114,42 @@ public class JobAgentService {
         );
         jobAnalysisTaskRepository.save(task);
         return response;
+    }
+
+    public JobAnalyzeFromFileResponse analyzeFromFile(String userId, String resumeText, MultipartFile file) {
+        String requiredUserId = requireUserId(userId);
+        if (resumeText == null || resumeText.isBlank()) {
+            throw new BusinessException("简历内容不能为空");
+        }
+
+        aiRateLimitService.checkAiCallAllowed(requiredUserId, "JOB_ANALYZE_FROM_FILE");
+        FastApiJobAttachmentTextResponse extracted = fastApiRagClient.extractJdText(file);
+        if (extracted.text() == null || extracted.text().isBlank()) {
+            throw new BusinessException("岗位附件未识别出有效文字");
+        }
+
+        FastApiJobAnalyzeResponse response = fastApiRagClient.analyzeJob(
+                resumeText,
+                extracted.text()
+        );
+        String resultJson = toResultJson(response);
+        JobAnalysisTask task = new JobAnalysisTask(
+                UUID.randomUUID(),
+                requiredUserId,
+                resumeText,
+                extracted.text(),
+                response.matchScore(),
+                resultJson,
+                Instant.now()
+        );
+        jobAnalysisTaskRepository.save(task);
+        return new JobAnalyzeFromFileResponse(
+                response,
+                extracted.text(),
+                extracted.filename(),
+                extracted.sourceType(),
+                extracted.warnings()
+        );
     }
 
     private String toResultJson(Object response) {
@@ -243,15 +291,17 @@ public class JobAgentService {
 
     public FastApiResumeOptimizeResponse optimizeResume(ResumeOptimizeRequest request) {
         String userId = requireUserId(request.userId());
+        String jobDescription = request.jobDescription() == null ? "" : request.jobDescription();
+        aiRateLimitService.checkAiCallAllowed(userId, "RESUME_OPTIMIZE");
         FastApiResumeOptimizeResponse response = fastApiRagClient.optimizeResume(
                 request.resumeText(),
-                request.jobDescription()
+                jobDescription
         );
         saveGeneratedTask(
                 userId,
                 JobGeneratedTaskType.RESUME_OPTIMIZE,
                 request.resumeText(),
-                request.jobDescription(),
+                jobDescription,
                 response
         );
         return response;
@@ -259,6 +309,7 @@ public class JobAgentService {
 
     public FastApiInterviewPrepResponse prepareInterview(InterviewPrepRequest request) {
         String userId = requireUserId(request.userId());
+        aiRateLimitService.checkAiCallAllowed(userId, "INTERVIEW_PREP");
         FastApiInterviewPrepResponse response = fastApiRagClient.prepareInterview(
                 request.resumeText(),
                 request.jobDescription()
@@ -275,6 +326,7 @@ public class JobAgentService {
 
     public FastApiStarInterviewAnswerResponse generateStarInterviewAnswer(StarInterviewAnswerRequest request) {
         String userId = requireUserId(request.userId());
+        aiRateLimitService.checkAiCallAllowed(userId, "STAR_INTERVIEW_ANSWER");
         FastApiStarInterviewAnswerResponse response = fastApiRagClient.generateStarInterviewAnswer(
                 request.resumeText(),
                 request.jobDescription(),
@@ -283,6 +335,23 @@ public class JobAgentService {
         saveGeneratedTask(
                 userId,
                 JobGeneratedTaskType.STAR_INTERVIEW_ANSWER,
+                request.resumeText(),
+                request.jobDescription(),
+                response
+        );
+        return response;
+    }
+
+    public FastApiJobDeliveryPackageResponse generateJobDeliveryPackage(JobDeliveryPackageRequest request) {
+        String userId = requireUserId(request.userId());
+        aiRateLimitService.checkAiCallAllowed(userId, "JOB_DELIVERY_PACKAGE");
+        FastApiJobDeliveryPackageResponse response = fastApiRagClient.generateJobDeliveryPackage(
+                request.resumeText(),
+                request.jobDescription()
+        );
+        saveGeneratedTask(
+                userId,
+                JobGeneratedTaskType.JOB_DELIVERY_PACKAGE,
                 request.resumeText(),
                 request.jobDescription(),
                 response
@@ -335,6 +404,18 @@ public class JobAgentService {
         jobGeneratedTaskRepository.delete(task);
     }
 
+    public JobGeneratedTaskResponse reviewGeneratedTask(
+            UUID taskId,
+            JobGeneratedTaskReviewRequest request
+    ) {
+        JobGeneratedTask task = getOwnedGeneratedTask(taskId, request.userId());
+        if (request.status() == JobReviewStatus.PENDING_REVIEW) {
+            throw new BusinessException("审核结果只能是通过或驳回");
+        }
+        task.review(request.status(), request.comment(), Instant.now());
+        return toGeneratedTaskResponse(jobGeneratedTaskRepository.save(task));
+    }
+
     private JobGeneratedTask getOwnedGeneratedTask(UUID taskId, String userId) {
         String requiredUserId = requireUserId(userId);
         JobGeneratedTask task = jobGeneratedTaskRepository.findById(taskId)
@@ -351,6 +432,11 @@ public class JobAgentService {
                 task.id(),
                 task.userId(),
                 task.taskType(),
+                task.status(),
+                task.errorMessage(),
+                task.reviewStatus(),
+                task.reviewComment(),
+                task.reviewedAt(),
                 task.resumeText(),
                 task.jobDescription(),
                 task.resultJson(),

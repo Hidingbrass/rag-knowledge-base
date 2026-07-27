@@ -23,9 +23,19 @@ public class RestClientConfig {
                 .withConnectTimeout(Duration.ofSeconds(properties.connectTimeoutSeconds()))
                 .withReadTimeout(Duration.ofSeconds(properties.readTimeoutSeconds()));
 
-        return RestClient.builder()
+        RestClient.Builder builder = RestClient.builder()
                 .baseUrl(properties.baseUrl())
-                .requestFactory(ClientHttpRequestFactories.get(settings))
-                .build();
+                .requestFactory(ClientHttpRequestFactories.get(settings));
+
+        // 如果配置了 FastAPI API Key，在所有请求中自动携带 X-API-Key 头。
+        applyInternalApiKey(builder, properties.apiKey());
+
+        return builder.build();
+    }
+
+    void applyInternalApiKey(RestClient.Builder builder, String apiKey) {
+        if (apiKey != null && !apiKey.isBlank()) {
+            builder.defaultHeader("X-API-Key", apiKey);
+        }
     }
 }

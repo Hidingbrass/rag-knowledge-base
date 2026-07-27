@@ -50,25 +50,25 @@ class DocumentControllerTests {
     }
 
     @Test
-    void listDocumentsShouldReturnForbiddenWhenUserHasNoAccess() throws Exception {
+    void listDocumentsShouldReturnForbiddenForSameDepartmentNonOwner() throws Exception {
         KnowledgeBase knowledgeBase = createDevKnowledgeBase();
 
         mockMvc.perform(get("/api/knowledge-bases/{knowledgeBaseId}/documents", knowledgeBase.id())
-                        .param("userId", "user-3")
-                        .param("department", "qa"))
+                        .param("userId", "user-2")
+                        .param("department", "dev"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.message").value("无权访问知识库: " + knowledgeBase.id()));
     }
 
     @Test
-    void uploadDocumentShouldReturnForbiddenBeforeCallingFastApiWhenUserHasNoAccess() throws Exception {
+    void uploadDocumentShouldReturnForbiddenForSameDepartmentNonOwnerBeforeCallingFastApi() throws Exception {
         KnowledgeBase knowledgeBase = createDevKnowledgeBase();
 
         mockMvc.perform(multipart("/api/knowledge-bases/{knowledgeBaseId}/documents", knowledgeBase.id())
                         .file("file", "fake pdf bytes".getBytes())
-                        .param("userId", "user-3")
-                        .param("department", "qa")
+                        .param("userId", "user-2")
+                        .param("department", "dev")
                         .contentType("application/pdf"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.success").value(false))

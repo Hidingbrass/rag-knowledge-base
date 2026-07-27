@@ -3,17 +3,26 @@ package com.example.aikb.controller;
 import com.example.aikb.common.ApiResponse;
 import com.example.aikb.dto.knowledgebase.CreateKnowledgeBaseRequest;
 import com.example.aikb.dto.knowledgebase.KnowledgeBaseResponse;
+import com.example.aikb.dto.knowledgebase.UpdateKnowledgeBaseRequest;
+import com.example.aikb.security.AuthenticatedUser;
 import com.example.aikb.service.KnowledgeBaseService;
 import jakarta.validation.Valid;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 import java.util.UUID;
+
+import static com.example.aikb.common.CurrentUserIdentity.departmentOrRequestParam;
+import static com.example.aikb.common.CurrentUserIdentity.userIdOrRequestParam;
 
 /**
  * 知识库管理接口。
@@ -35,14 +44,32 @@ public class KnowledgeBaseController {
 
     @PostMapping
     public ApiResponse<KnowledgeBaseResponse> create(
+            @AuthenticationPrincipal AuthenticatedUser currentUser,
             @Valid @RequestBody CreateKnowledgeBaseRequest request
     ) {
-        return ApiResponse.ok(KnowledgeBaseResponse.from(knowledgeBaseService.create(request)));
+        String ownerId = currentUser != null ? currentUser.username() : request.ownerId();
+        String department = request.department();
+        if ((department == null || department.isBlank()) && currentUser != null) {
+            department = currentUser.department();
+        }
+        return ApiResponse.ok(KnowledgeBaseResponse.from(knowledgeBaseService.create(new CreateKnowledgeBaseRequest(
+                request.name(),
+                request.description(),
+                ownerId,
+                department
+        ))));
     }
 
     @GetMapping
-    public ApiResponse<List<KnowledgeBaseResponse>> list() {
-        List<KnowledgeBaseResponse> responses = knowledgeBaseService.list()
+    public ApiResponse<List<KnowledgeBaseResponse>> list(
+            @AuthenticationPrincipal AuthenticatedUser currentUser,
+            @RequestParam(required = false) String userId,
+            @RequestParam(required = false) String department
+    ) {
+        List<KnowledgeBaseResponse> responses = knowledgeBaseService.listAccessible(
+                        userIdOrRequestParam(currentUser, userId),
+                        departmentOrRequestParam(currentUser, department)
+                )
                 .stream()
                 .map(KnowledgeBaseResponse::from)
                 .toList();
@@ -51,9 +78,49 @@ public class KnowledgeBaseController {
     }
 
     @GetMapping("/{knowledgeBaseId}")
-    public ApiResponse<KnowledgeBaseResponse> get(@PathVariable UUID knowledgeBaseId) {
+    public ApiResponse<KnowledgeBaseResponse> get(
+            @AuthenticationPrincipal AuthenticatedUser currentUser,
+            @PathVariable UUID knowledgeBaseId,
+            @RequestParam(required = false) String userId,
+            @RequestParam(required = false) String department
+    ) {
         return ApiResponse.ok(KnowledgeBaseResponse.from(
-                knowledgeBaseService.getRequired(knowledgeBaseId)
+                knowledgeBaseService.getRequiredWithAccess(
+                        knowledgeBaseId,
+                        userIdOrRequestParam(currentUser, userId),
+                        departmentOrRequestParam(currentUser, department)
+                )
         ));
+    }
+
+    @PatchMapping("/{knowledgeBaseId}")
+    public ApiResponse<KnowledgeBaseResponse> update(
+            @AuthenticationPrincipal AuthenticatedUser currentUser,
+            @PathVariable UUID knowledgeBaseId,
+            @RequestParam(required = false) String userId,
+            @RequestParam(required = false) String department,
+            @Valid @RequestBody UpdateKnowledgeBaseRequest request
+    ) {
+        return ApiResponse.ok(KnowledgeBaseResponse.from(knowledgeBaseService.update(
+                knowledgeBaseId,
+                userIdOrRequestParam(currentUser, userId),
+                departmentOrRequestParam(currentUser, department),
+                request
+        )));
+    }
+
+    @DeleteMapping("/{knowledgeBaseId}")
+    public ApiResponse<Void> delete(
+            @AuthenticationPrincipal AuthenticatedUser currentUser,
+            @PathVariable UUID knowledgeBaseId,
+            @RequestParam(required = false) String userId,
+            @RequestParam(required = false) String department
+    ) {
+        knowledgeBaseService.delete(
+                knowledgeBaseId,
+                userIdOrRequestParam(currentUser, userId),
+                departmentOrRequestParam(currentUser, department)
+        );
+        return ApiResponse.ok(null);
     }
 }

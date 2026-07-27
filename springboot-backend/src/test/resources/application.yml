@@ -18,3 +18,26 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+  data:
+    redis:
+      repositories:
+        enabled: false
+
+ai:
+  rate-limit:
+    enabled: false
+    per-minute: 5
+    per-day: 100
+
+upload:
+  lock:
+    enabled: false
+    ttl-seconds: 300
+
+auth:
+  security:
+    # 现有 Controller 测试覆盖旧版参数身份流程；严格鉴权由 StrictAuthenticationTests 单独覆盖。
+    allow-legacy-identity-parameters: true
+  jwt:
+    secret: test-only-change-me-to-a-long-random-secret
+    expires-in-seconds: 86400

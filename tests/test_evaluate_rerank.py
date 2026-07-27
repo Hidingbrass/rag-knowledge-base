@@ -62,16 +62,16 @@ def test_evaluate_rerank_uses_hybrid_candidates(monkeypatch):
         }
     ]
 
-    def fake_hybrid_search_chunks(question, candidate_k, keyword_limit):
+    def fake_hybrid_search_chunks(question, candidate_k, sparse_limit):
         captured["hybrid"] = {
             "question": question,
             "candidate_k": candidate_k,
-            "keyword_limit": keyword_limit,
+            "sparse_limit": sparse_limit,
         }
         return [
             {
                 "text": "hybrid source",
-                "keyword_score": 2,
+                "fusion_score": 0.75,
                 "page_number": 1,
             }
         ]
@@ -92,19 +92,20 @@ def test_evaluate_rerank_uses_hybrid_candidates(monkeypatch):
         candidate_k=6,
         rerank_top_k=3,
         retrieval_mode="hybrid",
-        keyword_limit=5,
+        sparse_limit=5,
     )
 
     assert captured["hybrid"] == {
         "question": "question",
         "candidate_k": 6,
-        "keyword_limit": 5,
+        "sparse_limit": 5,
     }
     assert evaluation["config"]["retrieval_mode"] == "hybrid"
-    assert evaluation["config"]["keyword_limit"] == 5
+    assert evaluation["config"]["sparse_limit"] == 5
     assert evaluation["results"][0]["candidate_hit"] is True
     assert evaluation["results"][0]["vector_scores"] == [None]
-    assert evaluation["results"][0]["keyword_scores"] == [2]
+    assert evaluation["results"][0]["sparse_scores"] == [None]
+    assert evaluation["results"][0]["fusion_scores"] == [0.75]
 
 
 def test_evaluate_rerank_rejects_invalid_retrieval_mode():
@@ -120,7 +121,7 @@ def test_compare_rerank_retrieval_modes_marks_recommended_mode(monkeypatch):
             rerank_top_k,
             rerank_min_score,
             retrieval_mode,
-            keyword_limit,
+            sparse_limit,
     ):
         captured_modes.append(retrieval_mode)
         if retrieval_mode == "vector":
@@ -143,7 +144,7 @@ def test_compare_rerank_retrieval_modes_marks_recommended_mode(monkeypatch):
         candidate_k=6,
         rerank_top_k=3,
         rerank_min_score=0.75,
-        keyword_limit=5,
+        sparse_limit=5,
     )
 
     assert captured_modes == ["vector", "hybrid"]
@@ -170,13 +171,13 @@ def test_run_rerank_retrieval_mode_comparison_saves_result(monkeypatch, capsys):
             candidate_k,
             rerank_top_k,
             rerank_min_score,
-            keyword_limit,
+            sparse_limit,
     ):
         captured["comparison_args"] = {
             "candidate_k": candidate_k,
             "rerank_top_k": rerank_top_k,
             "rerank_min_score": rerank_min_score,
-            "keyword_limit": keyword_limit,
+            "sparse_limit": sparse_limit,
         }
         return comparison_results
 
@@ -203,7 +204,7 @@ def test_run_rerank_retrieval_mode_comparison_saves_result(monkeypatch, capsys):
         candidate_k=6,
         rerank_top_k=3,
         rerank_min_score=0.75,
-        keyword_limit=5,
+        sparse_limit=5,
     )
 
     output = capsys.readouterr().out
@@ -213,7 +214,7 @@ def test_run_rerank_retrieval_mode_comparison_saves_result(monkeypatch, capsys):
         "candidate_k": 6,
         "rerank_top_k": 3,
         "rerank_min_score": 0.75,
-        "keyword_limit": 5,
+        "sparse_limit": 5,
     }
     assert captured["saved"] == {
         "result": comparison_results,

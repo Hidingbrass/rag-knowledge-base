@@ -99,6 +99,18 @@ class DuplicateDocumentError(AppError):
         )
 
 
+class ExternalServiceError(AppError):
+    """外部模型或平台调用失败，对应 HTTP 502。"""
+
+    def __init__(self, message: str, details: dict[str, Any] | None = None):
+        super().__init__(
+            message=message,
+            status_code=502,
+            error_code="UPSTREAM_SERVICE_ERROR",
+            details=details,
+        )
+
+
 async def app_error_handler(request: Request, error: AppError) -> JSONResponse:
     """把 AppError 转成 HTTP JSON 响应。
 
@@ -140,7 +152,7 @@ async def unhandled_exception_handler(request: Request, error: Exception) -> JSO
         status_code=500,
         content={
             "error_code": "INTERNAL_SERVER_ERROR",
-            "message": str(error),
+            "message": "服务器内部错误，请查看服务端日志",
         },
     )
 

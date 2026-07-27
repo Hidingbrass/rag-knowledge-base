@@ -17,6 +17,7 @@ def test_rag_request_defaults_come_from_settings():
     assert request.top_k == settings.default_top_k
     assert request.min_score == settings.default_min_score
     assert request.document_id is None
+    assert settings.structured_chat_max_output_tokens >= settings.chat_max_output_tokens
 
 
 def test_rerank_rag_request_defaults_come_from_settings():
@@ -29,18 +30,19 @@ def test_rerank_rag_request_defaults_come_from_settings():
     assert request.fallback_min_score == settings.default_fallback_min_score
     assert request.document_id is None
     assert request.retrieval_mode == "vector"
-    assert request.keyword_limit == 6
+    assert request.sparse_limit == settings.default_sparse_limit
+    assert settings.rerank_document_diversity_enabled is True
 
 
 def test_rerank_rag_request_accepts_hybrid_retrieval_mode():
     request = RerankRagChatRequest(
         question="什么是 RAG？",
         retrieval_mode="hybrid",
-        keyword_limit=8,
+        sparse_limit=8,
     )
 
     assert request.retrieval_mode == "hybrid"
-    assert request.keyword_limit == 8
+    assert request.sparse_limit == 8
 
 
 def test_rerank_rag_request_rejects_invalid_retrieval_mode():
@@ -51,9 +53,9 @@ def test_rerank_rag_request_rejects_invalid_retrieval_mode():
         )
 
 
-def test_rerank_rag_request_rejects_invalid_keyword_limit():
+def test_rerank_rag_request_rejects_invalid_sparse_limit():
     with pytest.raises(ValidationError):
         RerankRagChatRequest(
             question="什么是 RAG？",
-            keyword_limit=0,
+            sparse_limit=0,
         )

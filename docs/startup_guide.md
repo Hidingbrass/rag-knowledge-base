@@ -12,7 +12,7 @@ Spring Boot + FastAPI + Qdrant + MySQL + 通义千问
 Docker Compose 启动 MySQL / Qdrant
 -> 本地虚拟环境启动 FastAPI
 -> Maven 启动 Spring Boot
--> 浏览器打开静态演示页
+-> Vite 启动 Vue3 前端（需要实时调试时）
 ```
 
 这样最适合学习和调试：数据库和向量库交给 Docker，业务代码在本地 IDE 里跑。
@@ -21,7 +21,7 @@ Docker Compose 启动 MySQL / Qdrant
 
 ```text
 Docker Compose 启动 MySQL / Qdrant / FastAPI / Spring Boot
--> 浏览器打开 Vue3 企业知识库工作台
+-> 浏览器打开 Vue3 知途 AI 工作台
 ```
 
 这种方式适合快速演示和在新电脑上验证完整系统。
@@ -54,6 +54,16 @@ Copy-Item .env.example .env
 DASHSCOPE_API_KEY=你的真实 API Key
 ```
 
+再生成只用于 Spring Boot → FastAPI 的内部密钥，并写入 `FASTAPI_API_KEY`：
+
+```powershell
+openssl rand -hex 32
+```
+
+```env
+FASTAPI_API_KEY=上一步生成的随机长字符串
+```
+
 注意：
 
 - `.env` 保存真实密钥，不要提交到 Git。
@@ -63,6 +73,7 @@ DASHSCOPE_API_KEY=你的真实 API Key
 - Docker Compose 中的 MySQL 会读取 `MYSQL_ROOT_PASSWORD`、`MYSQL_DATABASE`、`MYSQL_USER`、`MYSQL_PASSWORD`。
 - Spring Boot 的 MySQL 配置可以通过 `MYSQL_URL`、`MYSQL_USER`、`MYSQL_PASSWORD` 覆盖。
 - Docker Compose 中的 Spring Boot 容器会把 FastAPI 地址覆盖为 `http://api:8000`。
+- Compose 不会把 FastAPI `8000` 映射到宿主机，并会拒绝空的 `FASTAPI_API_KEY`。
 - `docker compose config` 会把 `.env` 中的真实值展开显示，排查配置时可以用，但不要把完整输出发到公开平台。
 
 ## 2. 推荐启动方式：本地代码 + Docker 基础设施
@@ -131,7 +142,7 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 
 ```powershell
 curl.exe http://127.0.0.1:8000/health
-curl.exe http://127.0.0.1:8000/qdrant/health
+curl.exe -H "X-API-Key: 与 .env 中 FASTAPI_API_KEY 相同的值" http://127.0.0.1:8000/qdrant/health
 ```
 
 浏览器访问：
@@ -140,13 +151,15 @@ curl.exe http://127.0.0.1:8000/qdrant/health
 http://127.0.0.1:8000/docs
 ```
 
+本地 `.env` 配置了 `FASTAPI_API_KEY` 时，先在 Swagger 的 `Authorize` 中填写该值，再调试业务接口。
+
 FastAPI 负责：
 
 - PDF 解析
 - 文本切分
 - Embedding
 - Qdrant 入库
-- Vector / Hybrid 检索
+- Dense / Sparse / Hybrid RRF 检索
 - qwen3-rerank
 - 通义千问生成回答
 
@@ -177,7 +190,28 @@ Spring Boot 负责：
 - 调用 FastAPI
 - MySQL 持久化
 
-### 2.4 打开前端页面
+### 2.4 启动或打开前端
+
+前端源码位于 `springboot-backend/frontend`。需要热更新时，新开一个终端：
+
+```bash
+cd springboot-backend/frontend
+npm install
+npm run dev
+```
+
+浏览器访问 `http://127.0.0.1:5173`。开发服务器会把 `/api` 请求代理到
+`http://127.0.0.1:8081`；如果本机 Spring Boot 使用其他端口，请同步修改 `vite.config.js`。
+
+需要生成由 Spring Boot 托管的生产静态资源时执行：
+
+```bash
+cd springboot-backend/frontend
+npm test -- --run
+npm run build
+```
+
+构建完成后，也可以直接打开 Spring Boot 托管页面：
 
 浏览器访问：
 
@@ -185,7 +219,8 @@ Spring Boot 负责：
 http://127.0.0.1:8080/index.html
 ```
 
-`index.html` 是 Vue3 企业知识库工作台。
+`index.html` 是 Vite 构建后的 Vue3 知途 AI 学习与求职工作台；`/library`、`/study`、
+`/career` 支持直接访问和浏览器刷新。
 
 如需使用原始联调页，访问：
 
@@ -214,6 +249,9 @@ cd D:\pycharm\rag-knowledge-base
 docker compose up --build -d
 ```
 
+后端镜像使用多阶段构建：Node 22 先执行 `npm ci && npm run build`，Maven 再把前端产物打进
+Spring Boot jar，最终运行镜像只保留 JRE 和应用 jar。
+
 等价 Makefile 命令：
 
 ```bash
@@ -232,12 +270,11 @@ docker compose logs -f qdrant
 启动后访问：
 
 ```text
-Vue3 企业工作台: http://127.0.0.1:8080/index.html
+Vue3 知途 AI 工作台: http://127.0.0.1:8080/index.html
 原始联调页: http://127.0.0.1:8080/debug.html
 Spring Boot 健康检查: http://127.0.0.1:8080/api/health
-FastAPI Swagger: http://127.0.0.1:8000/docs
-FastAPI 健康检查: http://127.0.0.1:8000/health
-Qdrant 检查: http://127.0.0.1:8000/qdrant/health
+FastAPI: 仅 Compose 内网访问，由 Spring Boot 携带 X-API-Key 调用
+Qdrant 控制台: http://127.0.0.1:6333/dashboard
 ```
 
 如果是为了面试或项目展示，启动完成后建议按下面两份文档走：
@@ -313,8 +350,11 @@ curl.exe http://127.0.0.1:8080/api/knowledge-bases
 
 ### 5.3 检查 FastAPI
 
+Compose 模式不允许从宿主机直连 FastAPI。使用统一冒烟脚本从容器内部检查：
+
 ```powershell
-curl.exe http://127.0.0.1:8000/health
+bash scripts/smoke_check.sh
+docker compose logs --tail 100 api
 ```
 
 ### 5.4 检查 Qdrant
@@ -324,6 +364,10 @@ curl.exe http://127.0.0.1:6333/collections
 ```
 
 ### 5.5 检查端口
+
+Compose 默认把 Spring Boot 映射到宿主机 `8080`。如果该端口已被本机 Java
+进程或其他容器占用，可在 `.env` 中设置 `BACKEND_HOST_PORT=8081`，访问地址也相应改为
+`http://127.0.0.1:8081`；容器内部端口和服务间调用仍使用 `8080`。
 
 ```powershell
 netstat -ano | findstr ":8080"
@@ -352,7 +396,7 @@ netstat -ano | findstr ":3307"
 - Rerank fallback
 - 评测工具函数
 - 评测 CLI 参数解析
-- vector/hybrid 检索模式对比
+- Vector / Sparse / Hybrid RRF / Hybrid RRF + Rerank 消融评测
 
 ### 6.2 Spring Boot 测试
 
@@ -372,7 +416,7 @@ mvn -s maven-settings.xml test
 - 文档权限 Controller
 - 聊天权限 Controller
 - 旧版 RAG 接口停用
-- Vue3 企业工作台 `/index.html`
+- Vue3 知途 AI 工作台 `/index.html`
 - 原始联调页 `/debug.html`
 - `/favicon.ico` 不再误报 500
 
@@ -423,7 +467,7 @@ docker compose up -d mysql
 netstat -ano | findstr ":3307"
 ```
 
-### 8.2 上传 PDF 后状态是 FAILED
+### 8.2 上传资料后状态是 FAILED
 
 常见原因：
 
@@ -437,11 +481,12 @@ DASHSCOPE_API_KEY 无效
 处理：
 
 ```powershell
-curl.exe http://127.0.0.1:8000/health
-curl.exe http://127.0.0.1:8000/qdrant/health
+docker compose ps
+bash scripts/smoke_check.sh
+docker compose logs --tail 100 api
 ```
 
-然后重新上传 PDF。
+然后重新上传资料。当前资料库支持 PDF、Markdown（`.md` / `.markdown`）、Word（`.docx`）和 TXT；旧版 `.doc` 暂不支持。
 
 注意：
 

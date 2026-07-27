@@ -75,6 +75,12 @@ cp .env.example .env
 DASHSCOPE_API_KEY=你的真实 API Key
 ```
 
+再执行 `openssl rand -hex 32` 生成服务间随机密钥，并写入：
+
+```env
+FASTAPI_API_KEY=生成的随机长字符串
+```
+
 注意：
 
 - `.env` 是本机私密配置，不要提交到 Git。
@@ -122,8 +128,9 @@ backend -> Spring Boot 业务后端和前端页面
 
 ```text
 http://127.0.0.1:8080/index.html
-http://127.0.0.1:8000/docs
 ```
+
+Docker 模式下 FastAPI 只在 Compose 内网提供 `8000`，不映射到宿主机。
 
 ## 5. 启动 FastAPI
 
@@ -151,6 +158,9 @@ python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 http://127.0.0.1:8000/health
 http://127.0.0.1:8000/docs
 ```
+
+这是手动启动 FastAPI 的开发模式；使用 Swagger 业务接口前，在 `Authorize` 中填写
+`.env` 的 `FASTAPI_API_KEY`。
 
 ## 6. 启动 Spring Boot
 
@@ -260,13 +270,14 @@ Qdrant 使用 snapshot 或服务端持久化存储恢复。
 
 ```text
 1. docker compose up --build -d
-2. 访问 http://127.0.0.1:8000/health
+2. 执行 bash scripts/smoke_check.sh，从容器内检查 FastAPI
 3. 访问 http://127.0.0.1:8080/api/health
 4. 访问 http://127.0.0.1:8080/index.html
 5. 前端点击检查服务状态
 6. 创建知识库
-7. 上传 PDF
-8. 创建会话并提问
+7. 上传 PDF、Markdown、DOCX 或 TXT
+8. 编辑资料库与个人资料，并验证资料库删除二次确认
+9. 创建会话并提问
 ```
 
 开发模式按下面顺序验证，最容易定位问题：

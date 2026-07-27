@@ -18,6 +18,8 @@ import java.util.UUID;
 public interface KnowledgeDocumentRepository extends JpaRepository<KnowledgeDocument, UUID> {
     List<KnowledgeDocument> findByKnowledgeBaseIdOrderByCreatedAtDesc(UUID knowledgeBaseId);
 
+    void deleteByKnowledgeBaseId(UUID knowledgeBaseId);
+
     /**
      * 根据 FastAPI/Qdrant 返回的 document_id 查询 Spring Boot 业务文档。
      *

@@ -12,12 +12,13 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "fastapi")
 public record FastApiProperties(
         String baseUrl,
+        String apiKey,
         int connectTimeoutSeconds,
         int readTimeoutSeconds,
         int defaultCandidateK,
         int defaultRerankTopK,
         double defaultRerankMinScore,
         String defaultRetrievalMode,
-        int defaultKeywordLimit
+        int defaultSparseLimit
 ) {
 }

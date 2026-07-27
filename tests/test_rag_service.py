@@ -37,7 +37,7 @@ def test_rag_chat_response_filters_sources_by_min_score(monkeypatch):
     def fake_chat_completion(messages):
         assert "high score chunk" in messages[1]["content"]
         assert "low score chunk" not in messages[1]["content"]
-        return "answer"
+        return "answer [1]"
 
     monkeypatch.setattr(rag_service, "search_chunks", fake_search_chunks)
     monkeypatch.setattr(rag_service, "chat_completion", fake_chat_completion)
@@ -50,7 +50,8 @@ def test_rag_chat_response_filters_sources_by_min_score(monkeypatch):
         )
     )
 
-    assert response["answer"] == "answer"
+    assert response["answer"] == "answer [1]"
+    assert response["answer_validation"]["valid"] is True
     assert len(response["sources"]) == 1
     assert response["sources"][0]["text"] == "high score chunk"
 
@@ -107,7 +108,7 @@ def test_rerank_rag_falls_back_to_vector_sources_when_rerank_fails(monkeypatch):
     def fake_chat_completion(messages):
         assert "fallback source" in messages[1]["content"]
         assert "low fallback source" not in messages[1]["content"]
-        return "fallback answer"
+        return "fallback answer [1]"
 
     monkeypatch.setattr(rag_service, "search_chunks", fake_search_chunks)
     monkeypatch.setattr(rag_service, "rerank_chunks", fake_rerank_chunks)
@@ -122,7 +123,7 @@ def test_rerank_rag_falls_back_to_vector_sources_when_rerank_fails(monkeypatch):
         )
     )
 
-    assert response["answer"] == "fallback answer"
+    assert response["answer"] == "fallback answer [1]"
     assert response["retrieval_mode"] == "vector_fallback"
     assert response["rerank_error"] == "rerank failed"
     assert len(response["sources"]) == 1
@@ -135,20 +136,19 @@ def test_rerank_rag_uses_hybrid_candidates(monkeypatch):
     def fake_hybrid_search_chunks(
             question,
             candidate_k,
-            keyword_limit,
+            sparse_limit,
             document_id=None,
     ):
         captured["hybrid"] = {
             "question": question,
             "candidate_k": candidate_k,
-            "keyword_limit": keyword_limit,
+            "sparse_limit": sparse_limit,
             "document_id": document_id,
         }
         return [
             {
                 "text": "hybrid source",
-                "vector_score": 0.7,
-                "keyword_score": 2,
+                "fusion_score": 0.7,
                 "filename": "demo.pdf",
                 "page_number": 1,
                 "chunk_index": 0,
@@ -166,7 +166,7 @@ def test_rerank_rag_uses_hybrid_candidates(monkeypatch):
 
     def fake_chat_completion(messages):
         assert "hybrid source" in messages[1]["content"]
-        return "hybrid answer"
+        return "hybrid answer [1]"
 
     monkeypatch.setattr(rag_service, "hybrid_search_chunks", fake_hybrid_search_chunks)
     monkeypatch.setattr(rag_service, "rerank_chunks", fake_rerank_chunks)
@@ -179,7 +179,7 @@ def test_rerank_rag_uses_hybrid_candidates(monkeypatch):
             rerank_top_k=1,
             rerank_min_score=0.75,
             retrieval_mode="hybrid",
-            keyword_limit=5,
+            sparse_limit=5,
             document_id="doc-1",
         )
     )
@@ -187,47 +187,53 @@ def test_rerank_rag_uses_hybrid_candidates(monkeypatch):
     assert captured["hybrid"] == {
         "question": "question",
         "candidate_k": 6,
-        "keyword_limit": 5,
+        "sparse_limit": 5,
         "document_id": "doc-1",
     }
-    assert captured["rerank_sources"][0]["keyword_score"] == 2
-    assert response["answer"] == "hybrid answer"
+    assert captured["rerank_sources"][0]["fusion_score"] == 0.7
+    assert response["answer"] == "hybrid answer [1]"
     assert response["retrieval_mode"] == "rerank"
+    assert response["candidate_retrieval_mode"] == "hybrid"
 
 
-def test_rerank_rag_hybrid_fallback_skips_keyword_only_sources(monkeypatch):
+def test_rerank_rag_hybrid_fallback_runs_fresh_dense_search(monkeypatch):
     def fake_hybrid_search_chunks(
             question,
             candidate_k,
-            keyword_limit,
+            sparse_limit,
             document_id=None,
     ):
         return [
             {
-                "text": "keyword only source",
-                "keyword_score": 2,
+                "text": "hybrid RRF source",
+                "fusion_score": 0.7,
                 "filename": "demo.pdf",
                 "page_number": 1,
                 "chunk_index": 0,
             },
+        ]
+
+    def fake_search_chunks(question, top_k, document_id=None):
+        return [
             {
                 "text": "vector fallback source",
                 "vector_score": 0.7,
                 "filename": "demo.pdf",
                 "page_number": 2,
                 "chunk_index": 1,
-            },
+            }
         ]
 
     def fake_rerank_chunks(question, sources, rerank_top_k):
         raise RuntimeError("rerank failed")
 
     def fake_chat_completion(messages):
-        assert "keyword only source" not in messages[1]["content"]
+        assert "hybrid RRF source" not in messages[1]["content"]
         assert "vector fallback source" in messages[1]["content"]
-        return "fallback answer"
+        return "fallback answer [1]"
 
     monkeypatch.setattr(rag_service, "hybrid_search_chunks", fake_hybrid_search_chunks)
+    monkeypatch.setattr(rag_service, "search_chunks", fake_search_chunks)
     monkeypatch.setattr(rag_service, "rerank_chunks", fake_rerank_chunks)
     monkeypatch.setattr(rag_service, "chat_completion", fake_chat_completion)
 
@@ -241,7 +247,82 @@ def test_rerank_rag_hybrid_fallback_skips_keyword_only_sources(monkeypatch):
         )
     )
 
-    assert response["answer"] == "fallback answer"
+    assert response["answer"] == "fallback answer [1]"
     assert response["retrieval_mode"] == "vector_fallback"
     assert len(response["sources"]) == 1
     assert response["sources"][0]["text"] == "vector fallback source"
+
+
+def test_rerank_rag_stream_emits_progress_sources_and_text_deltas(monkeypatch):
+    def fake_search_chunks(question, top_k, document_id=None):
+        return [{
+            "text": "RAG 会先检索资料。",
+            "vector_score": 0.82,
+            "filename": "rag.md",
+            "page_number": 1,
+            "chunk_index": 0,
+        }]
+
+    def fake_rerank_chunks(question, sources, rerank_top_k):
+        return [{**sources[0], "rerank_score": 0.93}]
+
+    def fake_chat_completion_stream(messages):
+        assert "RAG 会先检索资料。" in messages[1]["content"]
+        yield "先检索"
+        yield "，再生成 [1]。"
+
+    monkeypatch.setattr(rag_service, "search_chunks", fake_search_chunks)
+    monkeypatch.setattr(rag_service, "rerank_chunks", fake_rerank_chunks)
+    monkeypatch.setattr(
+        rag_service,
+        "chat_completion_stream",
+        fake_chat_completion_stream,
+    )
+
+    events = list(rag_service.rag_chat_with_rerank_stream_events(
+        RerankRagChatRequest(
+            question="RAG 如何工作？",
+            candidate_k=3,
+            rerank_top_k=1,
+            rerank_min_score=0.75,
+            document_id="doc-1",
+        )
+    ))
+
+    assert [event["type"] for event in events] == [
+        "status",
+        "status",
+        "sources",
+        "status",
+        "delta",
+        "delta",
+        "verification",
+        "done",
+    ]
+    assert events[0]["stage"] == "retrieving"
+    assert events[1]["stage"] == "reranking"
+    assert events[2]["sources"][0]["filename"] == "rag.md"
+    assert events[3]["stage"] == "generating"
+    assert "".join(
+        event["content"] for event in events if event["type"] == "delta"
+    ) == "先检索，再生成 [1]。"
+    assert events[-1]["retrieval_mode"] == "rerank"
+
+
+def test_rerank_rag_stream_rejection_still_finishes_cleanly(monkeypatch):
+    monkeypatch.setattr(rag_service, "search_chunks", lambda *args, **kwargs: [])
+    monkeypatch.setattr(rag_service, "rerank_chunks", lambda *args, **kwargs: [])
+
+    events = list(rag_service.rag_chat_with_rerank_stream_events(
+        RerankRagChatRequest(
+            question="资料外的问题",
+            candidate_k=3,
+            rerank_top_k=1,
+        )
+    ))
+
+    assert any(
+        event == {"type": "delta", "content": rag_service.NO_RELEVANT_ANSWER}
+        for event in events
+    )
+    assert events[-1]["type"] == "done"

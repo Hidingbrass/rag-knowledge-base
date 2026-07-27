@@ -1,12 +1,14 @@
 package com.example.aikb.entity;
 
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import java.util.UUID;
+import com.example.aikb.security.SensitiveTextConverter;
 
 @Entity
 @Table(
@@ -23,15 +25,18 @@ public class JobAnalysisTask {
     private String userId;
 
     @Column(nullable = false, columnDefinition = "TEXT")
+    @Convert(converter = SensitiveTextConverter.class)
     private String resumeText;
 
     @Column(nullable = false, columnDefinition = "TEXT")
+    @Convert(converter = SensitiveTextConverter.class)
     private String jobDescription;
 
     @Column(nullable = false)
     private int matchScore;
 
     @Column(nullable = false, columnDefinition = "TEXT")
+    @Convert(converter = SensitiveTextConverter.class)
     private String resultJson;
 
     @Column(nullable = false)

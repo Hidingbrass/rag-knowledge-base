@@ -1,6 +1,7 @@
 package com.example.aikb.entity;
 
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
@@ -8,6 +9,7 @@ import jakarta.persistence.Table;
 
 import java.time.Instant;
 import java.util.UUID;
+import com.example.aikb.security.SensitiveTextConverter;
 
 @Entity
 @Table(
@@ -30,9 +32,11 @@ public class JobResumeVersion {
     private String targetRole;
 
     @Column(nullable = false, columnDefinition = "TEXT")
+    @Convert(converter = SensitiveTextConverter.class)
     private String resumeText;
 
     @Column(columnDefinition = "TEXT")
+    @Convert(converter = SensitiveTextConverter.class)
     private String notes;
 
     @Column(nullable = false)

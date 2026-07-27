@@ -150,11 +150,11 @@ vector_score 来自 Qdrant，表示向量相似度；rerank_score 来自 qwen3-r
 回答：
 
 ```text
-当前学习版用 userId 和 department 模拟登录用户。
+当前版本已接入 Spring Security + JWT，业务 API 默认要求登录，用户身份从 Token 获取。
 
-知识库有 owner 和 department。用户可以访问自己创建的知识库，也可以访问同部门知识库。文档、会话和消息都通过知识库关系间接校验权限。
+知识库保留 owner 和 department 字段，但两者职责不同：owner 是授权边界，department 在消费级产品中只是学习方向元数据。只有 owner 可以访问自己的知识库；文档、会话和消息都通过知识库关系间接复用这条规则。
 
-真实生产项目可以把这个模拟用户替换成 Spring Security + JWT，但权限判断仍然应该放在 Spring Boot 后端。
+旧版 userId 和 department 匿名联调只在显式开启 legacy 演示模式时可用；生产环境身份来自 JWT。测试还覆盖了两个同学习方向账号的越权场景，证明 department 不会扩大访问范围。
 ```
 
 ### Q12：为什么聊天消息要落 MySQL？
@@ -236,8 +236,8 @@ FastAPI 继续负责 Prompt、模型调用和结构化 JSON 解析；Spring Boot
 当前可以这样说：
 
 ```text
-FastAPI pytest：96 passed
-Spring Boot Maven test：57 passed
+FastAPI pytest：128 passed
+Spring Boot Maven test：100 passed
 ```
 
 ### Q19：提交前怎么检查？
@@ -281,9 +281,9 @@ Docker Compose 可以一键启动 MySQL、Qdrant、FastAPI 和 Spring Boot。
 ```text
 当前版本适合本地演示和简历展示，但还不是生产级系统。
 
-不足包括：没有接入真实登录认证，没有做大规模并发压测，没有监控告警和链路追踪，文档解析还没有做异步任务队列，上传文件也没有接对象存储。
+不足包括：当前 JWT 仍是项目内账号体系，没有刷新/撤销和企业 SSO；还没有做大规模并发压测、监控告警、链路追踪、异步文档任务队列和对象存储。
 
-下一步可以补 Spring Security/JWT、限流、异步任务、SSE 流式输出、对象存储、日志追踪、监控告警和云服务器部署。
+当前已完成 Spring Security/JWT、Redis 限流、AI 调用日志和 AI 伴学 NDJSON 流式输出。下一步可以补异步任务、对象存储、指标监控、链路追踪和云服务器部署。
 ```
 
 ### Q23：如果只能讲一个技术难点，你讲什么？

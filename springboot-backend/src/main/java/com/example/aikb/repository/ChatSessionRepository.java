@@ -13,4 +13,8 @@ import java.util.UUID;
  */
 public interface ChatSessionRepository extends JpaRepository<ChatSession, UUID> {
     List<ChatSession> findByUserIdOrderByCreatedAtDesc(String userId);
+
+    List<ChatSession> findByKnowledgeBaseId(UUID knowledgeBaseId);
+
+    void deleteByKnowledgeBaseId(UUID knowledgeBaseId);
 }

@@ -15,6 +15,21 @@ public record FastApiJdParseResponse(
         List<String> responsibilities,
         List<String> requirements,
         List<String> keywords,
-        List<String> risks
-) {
+        List<String> risks,
+        @JsonProperty("model_usage")
+        FastApiModelUsage modelUsage
+) implements FastApiUsageCarrier {
+    public FastApiJdParseResponse(
+            String jobTitle,
+            String seniority,
+            List<String> requiredSkills,
+            List<String> preferredSkills,
+            List<String> responsibilities,
+            List<String> requirements,
+            List<String> keywords,
+            List<String> risks
+    ) {
+        this(jobTitle, seniority, requiredSkills, preferredSkills, responsibilities,
+                requirements, keywords, risks, null);
+    }
 }

@@ -12,6 +12,7 @@ htmlcov/
 .idea/
 *.iml
 target/
+maven-repo/
 springboot-backend/target/
 springboot-backend/maven-repo/
 logs/
@@ -19,3 +20,10 @@ logs/
 dist/
 build/
 node_modules/
+.playwright-cli/
+
+# Local personal materials and generated resume artifacts.
+output/
+资料库/
+scripts/build_resume.py
+scripts/build_professional_resume_pdf.py

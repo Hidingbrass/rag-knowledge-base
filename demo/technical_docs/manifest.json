@@ -1,0 +1,43 @@
+{
+  "corpus_id": "aikb-enterprise-technical-docs-v1",
+  "title": "AIKB 企业内部技术文档库",
+  "truth_source": "当前 rag-knowledge-base 仓库实现",
+  "documents": [
+    {
+      "document_id": "AIKB-ARCH-001",
+      "title": "系统架构与服务边界",
+      "source": "source/AIKB-ARCH-001-system-architecture.md",
+      "pdf": "pdfs/AIKB-ARCH-001-system-architecture.pdf"
+    },
+    {
+      "document_id": "AIKB-RAG-002",
+      "title": "Hybrid RAG 检索与生成链路",
+      "source": "source/AIKB-RAG-002-hybrid-retrieval.md",
+      "pdf": "pdfs/AIKB-RAG-002-hybrid-retrieval.pdf"
+    },
+    {
+      "document_id": "AIKB-SEC-003",
+      "title": "JWT 鉴权与知识库权限",
+      "source": "source/AIKB-SEC-003-auth-permissions.md",
+      "pdf": "pdfs/AIKB-SEC-003-auth-permissions.pdf"
+    },
+    {
+      "document_id": "AIKB-OPS-004",
+      "title": "Docker 部署与故障排查",
+      "source": "source/AIKB-OPS-004-deployment-troubleshooting.md",
+      "pdf": "pdfs/AIKB-OPS-004-deployment-troubleshooting.pdf"
+    },
+    {
+      "document_id": "AIKB-API-005",
+      "title": "核心 API 契约与错误处理",
+      "source": "source/AIKB-API-005-api-contracts.md",
+      "pdf": "pdfs/AIKB-API-005-api-contracts.pdf"
+    },
+    {
+      "document_id": "AIKB-EVAL-006",
+      "title": "RAG 评测与发布质量门禁",
+      "source": "source/AIKB-EVAL-006-quality-gates.md",
+      "pdf": "pdfs/AIKB-EVAL-006-quality-gates.pdf"
+    }
+  ]
+}

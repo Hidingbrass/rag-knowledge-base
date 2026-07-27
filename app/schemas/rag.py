@@ -7,7 +7,7 @@
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, Field
 
 from app.core.config import settings
 
@@ -22,7 +22,7 @@ class RagChatRequest(BaseModel):
     - document_id：可选，只在指定文档内检索。
     """
 
-    question: str
+    question: str = Field(min_length=1, max_length=settings.max_question_chars)
     top_k: int = Field(default=settings.default_top_k, ge=1, le=10)
     min_score: float = Field(default=settings.default_min_score, ge=0.0, le=1.0)
     document_id: str | None = None
@@ -38,13 +38,20 @@ class RerankRagChatRequest(BaseModel):
     - rerank_min_score：Rerank 最高分低于该阈值时拒答。
     - document_id：可选，只在指定文档内检索。
     - fallback_min_score：Rerank API 失败时，回退到向量检索链路使用的阈值。
+    - retrieval_mode：vector 或 Dense/Sparse RRF hybrid。
+    - sparse_limit：Sparse 倒排分支最多召回的候选数量；兼容旧字段 keyword_limit。
     """
 
-    question: str
+    question: str = Field(min_length=1, max_length=settings.max_question_chars)
     candidate_k: int = Field(default=settings.default_candidate_k, ge=1, le=20)
     rerank_top_k: int = Field(default=settings.default_rerank_top_k, ge=1, le=10)
     rerank_min_score: float = Field(default=settings.default_rerank_min_score, ge=0.0, le=1.0)
     document_id: str | None = None
     fallback_min_score: float = Field(default=settings.default_fallback_min_score, ge=0.0, le=1.0)
     retrieval_mode: Literal["vector", "hybrid"] = "vector"
-    keyword_limit: int = Field(default=6, ge=1, le=20)
+    sparse_limit: int = Field(
+        default=settings.default_sparse_limit,
+        ge=1,
+        le=20,
+        validation_alias=AliasChoices("sparse_limit", "keyword_limit"),
+    )

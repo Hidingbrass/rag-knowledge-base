@@ -3,7 +3,11 @@ server:
 
 spring:
   application:
-    name: ai-knowledge-base-backend
+    name: zhitu-ai-backend
+  mvc:
+    # 流式 RAG 在生成期间保持异步响应，给检索、重排和首个 Token 留出完整时间。
+    async:
+      request-timeout: 120s
   datasource:
     # MySQL 保存 Spring Boot 侧的业务数据，例如知识库、文档状态、聊天记录。
     # 这些配置可以通过环境变量覆盖，避免把真实账号密码写死在代码里。
@@ -27,14 +31,44 @@ spring:
     locations: classpath:db/migration
     # 本地旧库如果已经被 Hibernate 自动建过表，首次接入 Flyway 时可以建立基线。
     baseline-on-migrate: true
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 2s
+      repositories:
+        enabled: false
 
 fastapi:
-  # FastAPI AI 服务地址。以后用 Docker Compose 内部通信时可以改成 http://api:8000。
-  base-url: http://127.0.0.1:8000
+  # 本地分进程开发默认访问 127.0.0.1；Docker Compose 会覆盖为内部地址 http://api:8000。
+  base-url: ${FASTAPI_BASE_URL:http://127.0.0.1:8000}
+  # 与 FastAPI 侧的 FASTAPI_API_KEY 对应；Docker Compose 模式强制配置。
+  api-key: ${FASTAPI_API_KEY:}
   connect-timeout-seconds: 3
   read-timeout-seconds: 60
   default-candidate-k: 6
   default-rerank-top-k: 3
   default-rerank-min-score: 0.75
   default-retrieval-mode: hybrid
-  default-keyword-limit: 6
+  default-sparse-limit: 6
+
+ai:
+  rate-limit:
+    enabled: ${AI_RATE_LIMIT_ENABLED:true}
+    per-minute: ${AI_RATE_LIMIT_PER_MINUTE:5}
+    per-day: ${AI_RATE_LIMIT_PER_DAY:100}
+
+upload:
+  lock:
+    enabled: ${UPLOAD_LOCK_ENABLED:true}
+    ttl-seconds: ${UPLOAD_LOCK_TTL_SECONDS:300}
+
+auth:
+  security:
+    # 默认安全模式：业务 API 必须携带 JWT。
+    # 仅旧版 debug 页或兼容测试需要匿名 userId/department 时才显式开启。
+    allow-legacy-identity-parameters: ${AUTH_ALLOW_LEGACY_IDENTITY_PARAMETERS:false}
+  jwt:
+    secret: ${JWT_SECRET:dev-only-change-me-to-a-long-random-secret}
+    expires-in-seconds: ${JWT_EXPIRES_IN_SECONDS:86400}

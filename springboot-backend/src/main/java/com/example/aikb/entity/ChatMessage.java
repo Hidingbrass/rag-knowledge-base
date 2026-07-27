@@ -2,6 +2,7 @@ package com.example.aikb.entity;
 
 import com.example.aikb.enums.MessageRole;
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -10,6 +11,7 @@ import jakarta.persistence.Table;
 
 import java.time.Instant;
 import java.util.UUID;
+import com.example.aikb.security.SensitiveTextConverter;
 
 /**
  * 聊天消息数据库实体。
@@ -35,9 +37,11 @@ public class ChatMessage {
     private MessageRole role;
 
     @Column(nullable = false, columnDefinition = "TEXT")
+    @Convert(converter = SensitiveTextConverter.class)
     private String content;
 
     @Column(columnDefinition = "TEXT")
+    @Convert(converter = SensitiveTextConverter.class)
     private String sourcesJson;
 
     private String retrievalMode;

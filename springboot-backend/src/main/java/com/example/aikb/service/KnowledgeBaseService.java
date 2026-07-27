@@ -1,11 +1,19 @@
 package com.example.aikb.service;
 
+import com.example.aikb.client.FastApiRagClient;
 import com.example.aikb.dto.knowledgebase.CreateKnowledgeBaseRequest;
+import com.example.aikb.dto.knowledgebase.UpdateKnowledgeBaseRequest;
+import com.example.aikb.entity.ChatSession;
 import com.example.aikb.entity.KnowledgeBase;
+import com.example.aikb.entity.KnowledgeDocument;
 import com.example.aikb.exception.BusinessException;
 import com.example.aikb.exception.ForbiddenException;
+import com.example.aikb.repository.ChatMessageRepository;
+import com.example.aikb.repository.ChatSessionRepository;
+import com.example.aikb.repository.KnowledgeDocumentRepository;
 import com.example.aikb.repository.KnowledgeBaseRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
@@ -28,16 +36,30 @@ import static com.example.aikb.common.RequestIdentity.requireUserId;
 public class KnowledgeBaseService {
 
     private final KnowledgeBaseRepository repository;
+    private final KnowledgeDocumentRepository documentRepository;
+    private final ChatSessionRepository chatSessionRepository;
+    private final ChatMessageRepository chatMessageRepository;
+    private final FastApiRagClient fastApiRagClient;
 
-    public KnowledgeBaseService(KnowledgeBaseRepository repository) {
+    public KnowledgeBaseService(
+            KnowledgeBaseRepository repository,
+            KnowledgeDocumentRepository documentRepository,
+            ChatSessionRepository chatSessionRepository,
+            ChatMessageRepository chatMessageRepository,
+            FastApiRagClient fastApiRagClient
+    ) {
         this.repository = repository;
+        this.documentRepository = documentRepository;
+        this.chatSessionRepository = chatSessionRepository;
+        this.chatMessageRepository = chatMessageRepository;
+        this.fastApiRagClient = fastApiRagClient;
     }
 
     public KnowledgeBase create(CreateKnowledgeBaseRequest request) {
         KnowledgeBase knowledgeBase = new KnowledgeBase(
                 UUID.randomUUID(),
-                request.name(),
-                request.description(),
+                requireName(request.name()),
+                normalizeDescription(request.description()),
                 requireUserId(request.ownerId()),
                 requireDepartment(request.department()),
                 Instant.now()
@@ -54,18 +76,15 @@ public class KnowledgeBaseService {
     /**
      * 查询知识库，并校验当前用户是否有访问权限。
      *
-     * 当前学习版规则：
-     * - 创建者可以访问自己创建的知识库；
-     * - 同部门用户可以访问同部门知识库；
-     * - 既不是创建者，也不是同部门用户时拒绝访问。
+     * 个人学习版规则：只有创建者本人可以访问自己的知识库。
+     * department 继续作为学习方向元数据保留，但不再参与权限判断。
      */
     public KnowledgeBase getRequiredWithAccess(UUID knowledgeBaseId, String userId, String department) {
         String requiredUserId = requireUserId(userId);
-        String requiredDepartment = requireDepartment(department);
+        // 保留旧接口的 department 必填校验，避免破坏已有客户端契约；授权只看 ownerId。
+        requireDepartment(department);
         KnowledgeBase knowledgeBase = getRequired(knowledgeBaseId);
-        boolean isOwner = knowledgeBase.ownerId().equals(requiredUserId);
-        boolean isSameDepartment = knowledgeBase.department().equals(requiredDepartment);
-        if (!isOwner && !isSameDepartment) {
+        if (!knowledgeBase.ownerId().equals(requiredUserId)) {
             throw new ForbiddenException("无权访问知识库: " + knowledgeBaseId);
         }
         return knowledgeBase;
@@ -73,6 +92,76 @@ public class KnowledgeBaseService {
 
     public List<KnowledgeBase> list() {
         return repository.findAllByOrderByCreatedAtDesc();
+    }
+
+    /**
+     * 只返回当前用户自己创建的知识库。
+     * department 参数仅为旧接口兼容保留，不参与查询过滤。
+     */
+    public List<KnowledgeBase> listAccessible(String userId, String department) {
+        String requiredUserId = requireUserId(userId);
+        requireDepartment(department);
+        return repository.findByOwnerIdOrderByCreatedAtDesc(requiredUserId);
+    }
+
+    @Transactional
+    public KnowledgeBase update(
+            UUID knowledgeBaseId,
+            String userId,
+            String department,
+            UpdateKnowledgeBaseRequest request
+    ) {
+        KnowledgeBase knowledgeBase = getRequiredWithAccess(knowledgeBaseId, userId, department);
+        knowledgeBase.updateDetails(
+                requireName(request.name()),
+                normalizeDescription(request.description()),
+                requireDepartment(request.department())
+        );
+        return repository.save(knowledgeBase);
+    }
+
+    /**
+     * 删除个人资料库及其完整关联数据。
+     *
+     * Qdrant 删除接口是幂等的，因此先删除向量；如果后续数据库事务失败，重试仍然安全。
+     * MySQL 按“消息 -> 会话 -> 文档 -> 资料库”顺序删除，避免留下孤立业务数据。
+     */
+    @Transactional
+    public void delete(UUID knowledgeBaseId, String userId, String department) {
+        KnowledgeBase knowledgeBase = getRequiredWithAccess(knowledgeBaseId, userId, department);
+        List<KnowledgeDocument> documents = documentRepository
+                .findByKnowledgeBaseIdOrderByCreatedAtDesc(knowledgeBaseId);
+
+        documents.stream()
+                .map(KnowledgeDocument::fastApiDocumentId)
+                .filter(documentId -> documentId != null && !documentId.isBlank())
+                .distinct()
+                .forEach(fastApiRagClient::deleteDocument);
+
+        List<UUID> sessionIds = chatSessionRepository.findByKnowledgeBaseId(knowledgeBaseId)
+                .stream()
+                .map(ChatSession::id)
+                .toList();
+        if (!sessionIds.isEmpty()) {
+            chatMessageRepository.deleteBySessionIdIn(sessionIds);
+        }
+        chatSessionRepository.deleteByKnowledgeBaseId(knowledgeBaseId);
+        documentRepository.deleteByKnowledgeBaseId(knowledgeBaseId);
+        repository.delete(knowledgeBase);
+    }
+
+    private String requireName(String name) {
+        if (name == null || name.isBlank()) {
+            throw new BusinessException("知识库名称不能为空");
+        }
+        return name.trim();
+    }
+
+    private String normalizeDescription(String description) {
+        if (description == null || description.isBlank()) {
+            return null;
+        }
+        return description.trim();
     }
 
 }

@@ -71,15 +71,15 @@ http://127.0.0.1:8080/index.html
 1. 打开 Vue3 企业工作台。
 2. 检查 Spring Boot 健康状态。
 3. 创建或选择知识库。
-4. 上传测试 PDF。
+4. 上传 `demo/technical_docs/pdfs/` 下六份企业技术 PDF。
 5. 等文档状态变成 AVAILABLE。
 ```
 
 讲解重点：
 
 ```text
-上传 PDF 后，Spring Boot 会先保存文档记录和状态，计算文件 Hash 做重复上传检测，再调用 FastAPI。
-FastAPI 负责解析 PDF、切分 Chunk、调用通义千问 Embedding，并把向量写入 Qdrant。
+上传资料后，Spring Boot 会先校验 PDF / Markdown / DOCX / TXT 白名单，保存文档记录和状态，计算文件 Hash 做重复上传检测，再调用 FastAPI。
+FastAPI 按格式提取正文、切分 Chunk、调用通义千问 Embedding，并把向量写入 Qdrant。
 处理完成后，Spring Boot 保存 fastApiDocumentId、chunkCount 和 AVAILABLE 状态。
 ```
 
@@ -90,6 +90,8 @@ MySQL 中的 document id 是业务文档 ID。
 FastAPI / Qdrant 中的 document_id 用于向量检索过滤。
 这两个 ID 分开，是为了让业务数据和向量数据职责清晰。
 ```
+
+补充演示资料管理：修改资料库名称或学习目标；删除资料库时确认关联向量、文档、会话和消息被一起清理；点击右上角个人信息修改昵称与学习方向。
 
 ## 4. 演示 RAG 问答
 
@@ -131,17 +133,18 @@ RAG 链路可以这样讲：
 操作顺序：
 
 ```text
-1. 切换不同 userId / department。
-2. 查看知识库、文档、会话是否按权限过滤。
+1. 注册或登录两个学习方向相同的账号。
+2. 用账号 A 创建知识库，再验证账号 B 看不到列表且访问详情、文档和会话时返回 403。
 3. 刷新页面后重新加载数据。
 ```
 
 讲解重点：
 
 ```text
-当前学习版用 userId + department 模拟登录用户。
-真实项目可以替换成 Spring Security + JWT。
+当前版本已经接入 Spring Security + JWT，业务接口默认强制登录。
+旧版 userId + department 匿名联调只能通过配置显式开启。
 权限判断放在 Spring Boot，不放在前端，因为前端参数不能被信任。
+个人学习资料只允许 owner 访问；department 只是学习方向标签，不代表共享范围。
 ```
 
 可以这样补充：
@@ -238,14 +241,16 @@ Spring Boot 使用 JUnit 和 MockMvc，覆盖 Controller、Service、权限边�
 当前结果：
 
 ```text
-FastAPI pytest：96 passed
-Spring Boot Maven test：57 passed
+FastAPI pytest：128 passed
+Spring Boot Maven test：100 passed
 ```
 
 补充评测：
 
 ```text
-RAG 侧还单独建立了 30 条评测集，覆盖普通问题和拒答问题，用来评估检索命中、拒答准确率、引用有效率和 Rerank 参数。
+RAG 侧保留 30 条历史单文稿回归集，并新增 26 条企业技术文档独立评测集，覆盖语义改写、精确配置名、跨文档和拒答问题。四路消融按 gold PDF 文件名评估 Hit@K、MRR、文档召回率和延迟。
+
+2026-07-16 的真实实验已将 6 份 PDF 切成 40 个 Chunk。Vector、Sparse、Hybrid 的 Hit@6 和 Hybrid + Rerank 的 Hit@3 都是 1.0，MRR 分别是 0.95、0.8792、0.925、0.975。评测曾发现 Rerank Top 3 被同文档 Chunk 占满；我继续做真实 A/B，用候选排名与精排排名的文档级 RRF 把 Top 3 从 OPS/EVAL/EVAL 调整为 EVAL/OPS/SEC，跨文档 gold recall 从 0.5 修复为 1.0。我不会把这套小语料结果夸大成生产效果。
 ```
 
 ## 10. 结尾总结

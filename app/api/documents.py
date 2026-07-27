@@ -15,43 +15,74 @@ HTTP 层只负责：
 
 from fastapi import APIRouter, File, UploadFile
 
+from app.core.config import settings
 from app.core.exceptions import BadRequestError
-from app.services.document_service import index_pdf_document, preview_pdf_document
+from app.services.document_service import (
+    index_document as index_document_service,
+    preview_document as preview_document_service,
+)
 from app.services.qdrant_service import delete_document_points, list_indexed_documents
+from app.services.model_runtime import collect_model_usage, current_model_usage
 
 
 router = APIRouter()
 
+# 读取时多读 1 字节，用来判断是否超限，同时避免把超大文件完整读入内存。
+_MAX_READ_SIZE = settings.max_upload_size_mb * 1024 * 1024 + 1
 
-def ensure_pdf_file(file: UploadFile):
-    """校验上传文件是否为 PDF。
+
+SUPPORTED_DOCUMENT_EXTENSIONS = {".pdf", ".md", ".markdown", ".docx", ".txt"}
+
+
+def ensure_supported_document(file: UploadFile):
+    """校验上传文件是否属于允许入库的文档格式。
 
     参数：
     - file：FastAPI UploadFile。
 
     抛出：
-    - BadRequestError：当文件类型不是 application/pdf。
+    - BadRequestError：当文件扩展名不在支持列表中。
     """
-    if file.content_type != "application/pdf":
-        raise BadRequestError("目前只支持 PDF 文件")
+    filename = (file.filename or "").lower()
+    if not any(filename.endswith(extension) for extension in SUPPORTED_DOCUMENT_EXTENSIONS):
+        raise BadRequestError("支持 PDF、Markdown、Word（DOCX）和 TXT 文件")
+
+
+def ensure_file_size(content: bytes):
+    """校验上传文件是否超过大小限制。
+
+    参数：
+    - content：文件字节内容。
+
+    抛出：
+    - BadRequestError：当文件超过最大上传大小时。
+    """
+    max_size = settings.max_upload_size_mb
+    if len(content) > max_size * 1024 * 1024:
+        raise BadRequestError(f"文件大小不能超过 {max_size}MB")
 
 
 @router.post("/documents/preview")
 async def preview_document(file: UploadFile = File(...)):
-    """预览 PDF 解析和切分结果，但不写入 Qdrant。"""
-    ensure_pdf_file(file)
-    content = await file.read()
+    """预览文档解析和切分结果，但不写入 Qdrant。"""
+    ensure_supported_document(file)
+    content = await file.read(_MAX_READ_SIZE)
+    ensure_file_size(content)
 
-    return preview_pdf_document(file.filename, content)
+    return preview_document_service(file.filename or "unknown", content)
 
 
 @router.post("/documents/index")
 async def index_document(file: UploadFile = File(...)):
-    """上传 PDF、解析切分、向量化并写入 Qdrant。"""
-    ensure_pdf_file(file)
-    content = await file.read()
+    """上传受支持文档、解析切分、向量化并写入 Qdrant。"""
+    ensure_supported_document(file)
+    content = await file.read(_MAX_READ_SIZE)
+    ensure_file_size(content)
 
-    return index_pdf_document(file.filename, content)
+    with collect_model_usage():
+        response = index_document_service(file.filename or "unknown", content)
+        response["model_usage"] = current_model_usage()
+        return response
 
 
 @router.delete("/documents/{document_id}")

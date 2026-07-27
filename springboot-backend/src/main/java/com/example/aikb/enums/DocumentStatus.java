@@ -14,7 +14,7 @@ public enum DocumentStatus {
     UPLOADED,
 
     /**
-     * 正在调用 FastAPI 进行 PDF 解析、切分、Embedding 和 Qdrant 入库。
+     * 正在调用 FastAPI 进行文档解析、切分、Embedding 和 Qdrant 入库。
      */
     PROCESSING,
 
@@ -24,7 +24,7 @@ public enum DocumentStatus {
     AVAILABLE,
 
     /**
-     * 入库失败，例如 PDF 不合法、FastAPI 不可用、模型服务失败等。
+     * 入库失败，例如文档不合法、FastAPI 不可用、模型服务失败等。
      */
     FAILED
 }

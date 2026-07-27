@@ -1,13 +1,19 @@
 package com.example.aikb.client;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.example.aikb.config.FastApiProperties;
 import com.example.aikb.dto.fastapi.FastApiDocumentIndexResponse;
 import com.example.aikb.dto.fastapi.FastApiInterviewPrepRequest;
 import com.example.aikb.dto.fastapi.FastApiInterviewPrepResponse;
 import com.example.aikb.dto.fastapi.FastApiJdParseRequest;
 import com.example.aikb.dto.fastapi.FastApiJdParseResponse;
+import com.example.aikb.dto.fastapi.FastApiModelUsage;
+import com.example.aikb.dto.fastapi.FastApiJobAttachmentTextResponse;
 import com.example.aikb.dto.fastapi.FastApiJobAnalyzeRequest;
 import com.example.aikb.dto.fastapi.FastApiJobAnalyzeResponse;
+import com.example.aikb.dto.fastapi.FastApiJobDeliveryPackageRequest;
+import com.example.aikb.dto.fastapi.FastApiJobDeliveryPackageResponse;
 import com.example.aikb.dto.fastapi.FastApiRagResponse;
 import com.example.aikb.dto.fastapi.FastApiRerankChatRequest;
 import com.example.aikb.dto.fastapi.FastApiResumeOptimizeRequest;
@@ -16,6 +22,7 @@ import com.example.aikb.dto.fastapi.FastApiResumeParseRequest;
 import com.example.aikb.dto.fastapi.FastApiResumeParseResponse;
 import com.example.aikb.dto.fastapi.FastApiStarInterviewAnswerRequest;
 import com.example.aikb.dto.fastapi.FastApiStarInterviewAnswerResponse;
+import com.example.aikb.dto.fastapi.FastApiUsageCarrier;
 import com.example.aikb.exception.BusinessException;
 import com.example.aikb.service.AiCallLogService;
 import org.springframework.core.io.ByteArrayResource;
@@ -25,9 +32,14 @@ import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 /**
@@ -43,6 +55,8 @@ import java.util.function.Supplier;
  */
 @Component
 public class FastApiRagClient {
+
+    private static final ObjectMapper ERROR_RESPONSE_MAPPER = new ObjectMapper();
 
     private final RestClient fastApiRestClient;
     private final FastApiProperties properties;
@@ -66,7 +80,7 @@ public class FastApiRagClient {
      * - rerankTopK：Rerank 后进入 Prompt 的片段数量；
      * - rerankMinScore：最高 rerank_score 低于这个分数时拒答；
      * - retrievalMode：vector 或 hybrid；
-     * - keywordLimit：hybrid 检索中的关键词候选数量。
+     * - sparseLimit：hybrid 检索中的稀疏词法候选数量。
      */
     public FastApiRagResponse askWithRerank(String question, String documentId) {
         FastApiRerankChatRequest request = new FastApiRerankChatRequest(
@@ -75,7 +89,7 @@ public class FastApiRagClient {
                 properties.defaultRerankTopK(),
                 properties.defaultRerankMinScore(),
                 properties.defaultRetrievalMode(),
-                properties.defaultKeywordLimit(),
+                properties.defaultSparseLimit(),
                 documentId
         );
 
@@ -90,7 +104,121 @@ public class FastApiRagClient {
     }
 
     /**
-     * 调用 FastAPI 的 PDF 文档入库接口。
+     * 调用 FastAPI 的 NDJSON RAG 流接口。
+     *
+     * 每读取到一行就立即交给 ChatService；不在 Spring 内存中等待完整回答，
+     * 因此前端能够看到检索状态和模型文本增量。
+     */
+    public void streamAskWithRerank(
+            String question,
+            String documentId,
+            Consumer<JsonNode> eventConsumer
+    ) {
+        FastApiRerankChatRequest request = new FastApiRerankChatRequest(
+                question,
+                properties.defaultCandidateK(),
+                properties.defaultRerankTopK(),
+                properties.defaultRerankMinScore(),
+                properties.defaultRetrievalMode(),
+                properties.defaultSparseLimit(),
+                documentId
+        );
+        long startedAt = System.nanoTime();
+        FastApiModelUsage[] usage = {null};
+
+        try {
+            fastApiRestClient.post()
+                    .uri("/rag/chat/rerank/stream")
+                    .accept(MediaType.parseMediaType("application/x-ndjson"))
+                    .body(request)
+                    .exchange((clientRequest, clientResponse) -> {
+                        if (!clientResponse.getStatusCode().is2xxSuccessful()) {
+                            String responseBody = new String(
+                                    clientResponse.getBody().readAllBytes(),
+                                    StandardCharsets.UTF_8
+                            );
+                            throw new BusinessException(
+                                    failureMessageWithResponseBody(
+                                            "调用 FastAPI RAG 流式服务失败",
+                                            responseBody
+                                    )
+                            );
+                        }
+
+                        try (BufferedReader reader = new BufferedReader(new InputStreamReader(
+                                clientResponse.getBody(),
+                                StandardCharsets.UTF_8
+                        ))) {
+                            String line;
+                            while ((line = reader.readLine()) != null) {
+                                if (!line.isBlank()) {
+                                    JsonNode event = ERROR_RESPONSE_MAPPER.readTree(line);
+                                    JsonNode usageNode = event.path("model_usage");
+                                    if (usageNode.isObject()) {
+                                        usage[0] = ERROR_RESPONSE_MAPPER.treeToValue(
+                                                usageNode,
+                                                FastApiModelUsage.class
+                                        );
+                                    }
+                                    eventConsumer.accept(event);
+                                }
+                            }
+                        }
+                        return null;
+                    });
+            if (usage[0] == null) {
+                aiCallLogService.recordFastApiCall(
+                        "RAG_RERANK_CHAT_STREAM",
+                        "/rag/chat/rerank/stream",
+                        true,
+                        elapsedMs(startedAt),
+                        null
+                );
+            } else {
+                aiCallLogService.recordFastApiCall(
+                        "RAG_RERANK_CHAT_STREAM",
+                        "/rag/chat/rerank/stream",
+                        true,
+                        elapsedMs(startedAt),
+                        null,
+                        usage[0]
+                );
+            }
+        } catch (BusinessException exception) {
+            aiCallLogService.recordFastApiCall(
+                    "RAG_RERANK_CHAT_STREAM",
+                    "/rag/chat/rerank/stream",
+                    false,
+                    elapsedMs(startedAt),
+                    exception.getMessage()
+            );
+            throw exception;
+        } catch (RestClientException exception) {
+            aiCallLogService.recordFastApiCall(
+                    "RAG_RERANK_CHAT_STREAM",
+                    "/rag/chat/rerank/stream",
+                    false,
+                    elapsedMs(startedAt),
+                    exception.getMessage()
+            );
+            throw new BusinessException(
+                    failureMessageWithDetail("调用 FastAPI RAG 流式服务失败", exception),
+                    exception
+            );
+        } catch (Exception exception) {
+            aiCallLogService.recordFastApiCall(
+                    "RAG_RERANK_CHAT_STREAM",
+                    "/rag/chat/rerank/stream",
+                    false,
+                    elapsedMs(startedAt),
+                    exception.getMessage()
+            );
+            throw new BusinessException("读取 FastAPI RAG 流式响应失败", exception);
+        }
+    }
+
+    /**
+     * 调用 FastAPI 的多格式文档入库接口。
      * <p>
      * 输入：
      * - file：Spring Boot 接收到的 MultipartFile。
@@ -103,18 +231,8 @@ public class FastApiRagClient {
      * 同时要保留原始文件名，否则 FastAPI 侧拿到的 filename 可能为空。
      */
     public FastApiDocumentIndexResponse indexDocument(MultipartFile file) {
-        String filename = file.getOriginalFilename();
-
         try {
-            ByteArrayResource fileResource = new ByteArrayResource(file.getBytes()) {
-                @Override
-                public String getFilename() {
-                    return filename;
-                }
-            };
-
-            MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
-            body.add("file", fileResource);
+            MultiValueMap<String, Object> body = multipartFileBody(file);
 
             return callFastApi("DOCUMENT_INDEX", "/documents/index", () ->
                     fastApiRestClient.post()
@@ -128,6 +246,49 @@ public class FastApiRagClient {
         } catch (IOException exception) {
             throw new BusinessException("读取上传文件失败", exception);
         }
+    }
+
+    public void deleteDocument(String documentId) {
+        callFastApi("DOCUMENT_DELETE", "/documents/{documentId}", () ->
+                        fastApiRestClient.delete()
+                                .uri("/documents/{documentId}", documentId)
+                                .retrieve()
+                                .toBodilessEntity(),
+                "调用 FastAPI 文档删除服务失败"
+        );
+    }
+
+    public FastApiJobAttachmentTextResponse extractJdText(MultipartFile file) {
+        try {
+            MultiValueMap<String, Object> body = multipartFileBody(file);
+
+            return callFastApi("JD_ATTACHMENT_EXTRACT", "/job/jd/extract-text", () ->
+                    fastApiRestClient.post()
+                            .uri("/job/jd/extract-text")
+                            .contentType(MediaType.MULTIPART_FORM_DATA)
+                            .body(body)
+                            .retrieve()
+                            .body(FastApiJobAttachmentTextResponse.class),
+                    "调用 FastAPI 岗位附件识别服务失败"
+            );
+        } catch (IOException exception) {
+            throw new BusinessException("读取上传文件失败", exception);
+        }
+    }
+
+    private MultiValueMap<String, Object> multipartFileBody(MultipartFile file) throws IOException {
+        String filename = file.getOriginalFilename();
+
+        ByteArrayResource fileResource = new ByteArrayResource(file.getBytes()) {
+            @Override
+            public String getFilename() {
+                return filename;
+            }
+        };
+
+        MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
+        body.add("file", fileResource);
+        return body;
     }
 
     public FastApiJobAnalyzeResponse analyzeJob(String resumeText, String jobDescription) {
@@ -220,11 +381,47 @@ public class FastApiRagClient {
         );
     }
 
+    public FastApiJobDeliveryPackageResponse generateJobDeliveryPackage(String resumeText, String jobDescription) {
+        FastApiJobDeliveryPackageRequest request = new FastApiJobDeliveryPackageRequest(
+                resumeText,
+                jobDescription
+        );
+
+        return callFastApi("JOB_DELIVERY_PACKAGE", "/job/delivery-package", () ->
+                fastApiRestClient.post()
+                        .uri("/job/delivery-package")
+                        .body(request)
+                        .retrieve()
+                        .body(FastApiJobDeliveryPackageResponse.class),
+                "调用 FastAPI 求职成品包服务失败"
+        );
+    }
+
     private <T> T callFastApi(String businessType, String endpoint, Supplier<T> call, String failureMessage) {
         long startedAt = System.nanoTime();
         try {
             T response = call.get();
-            aiCallLogService.recordFastApiCall(businessType, endpoint, true, elapsedMs(startedAt), null);
+            FastApiModelUsage usage = response instanceof FastApiUsageCarrier carrier
+                    ? carrier.modelUsage()
+                    : null;
+            if (usage == null) {
+                aiCallLogService.recordFastApiCall(
+                        businessType,
+                        endpoint,
+                        true,
+                        elapsedMs(startedAt),
+                        null
+                );
+            } else {
+                aiCallLogService.recordFastApiCall(
+                        businessType,
+                        endpoint,
+                        true,
+                        elapsedMs(startedAt),
+                        null,
+                        usage
+                );
+            }
             return response;
         } catch (RestClientException exception) {
             aiCallLogService.recordFastApiCall(
@@ -234,7 +431,44 @@ public class FastApiRagClient {
                     elapsedMs(startedAt),
                     exception.getMessage()
             );
-            throw new BusinessException(failureMessage, exception);
+            throw new BusinessException(failureMessageWithDetail(failureMessage, exception), exception);
+        }
+    }
+
+    private String failureMessageWithDetail(String failureMessage, RestClientException exception) {
+        if (!(exception instanceof RestClientResponseException responseException)) {
+            return failureMessage;
+        }
+
+        String responseBody = responseException.getResponseBodyAsString();
+        if (responseBody == null || responseBody.isBlank()) {
+            return failureMessage;
+        }
+
+        try {
+            JsonNode messageNode = ERROR_RESPONSE_MAPPER.readTree(responseBody).path("message");
+            String detail = messageNode.asText("").trim();
+            if (!detail.isEmpty()) {
+                return failureMessage + "：" + detail;
+            }
+        } catch (Exception ignored) {
+            // 非 JSON 或非统一错误响应时保留原有通用提示，避免把上游原始响应直接暴露给用户。
+        }
+        return failureMessage;
+    }
+
+    private String failureMessageWithResponseBody(String failureMessage, String responseBody) {
+        if (responseBody == null || responseBody.isBlank()) {
+            return failureMessage;
+        }
+        try {
+            String detail = ERROR_RESPONSE_MAPPER.readTree(responseBody)
+                    .path("message")
+                    .asText("")
+                    .trim();
+            return detail.isEmpty() ? failureMessage : failureMessage + "：" + detail;
+        } catch (Exception ignored) {
+            return failureMessage;
         }
     }
 

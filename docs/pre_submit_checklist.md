@@ -56,7 +56,7 @@ python -m pytest -q
 当前预期：
 
 ```text
-96 passed
+128 passed
 ```
 
 这组测试不应依赖真实通义千问调用。测试里会用 Mock 或只测纯函数逻辑。
@@ -73,7 +73,7 @@ mvn -s maven-settings.xml test
 当前预期：
 
 ```text
-57 passed
+100 passed
 ```
 
 Spring Boot 测试使用 H2 和 MockBean，不依赖本地 MySQL、Qdrant 或真实 FastAPI。
@@ -118,6 +118,9 @@ http://127.0.0.1:8080/api/health
 http://127.0.0.1:8080/index.html
 ```
 
+这里的 `8000` 仅适用于手动启动 FastAPI 的本地开发模式；业务接口需要携带
+`.env` 中的 `X-API-Key`。完整 Docker 模式不会映射该端口。
+
 完整 Docker 模式至少检查：
 
 ```bash
@@ -125,13 +128,16 @@ docker compose up --build -d
 docker compose ps
 docker compose logs -f api
 docker compose logs -f backend
+bash scripts/smoke_check.sh
 ```
 
 演示页需要确认：
 
 ```text
 可以创建或读取知识库
-可以上传 PDF 并看到文档状态
+可以上传 PDF、Markdown、DOCX 或 TXT 并看到文档状态
+可以编辑、删除本人资料库，且非 owner 无权操作
+可以修改昵称和学习方向，刷新后仍能读取最新资料
 可以创建会话并提问
 求职 Agent 页面可以看到简历解析、JD 解析、分析、优化、面试准备、STAR 答案、历史、对比和导出入口
 ```

@@ -16,7 +16,7 @@ def evaluate_rerank(
         rerank_top_k: int = settings.default_rerank_top_k,
         rerank_min_score: float = settings.default_rerank_min_score,
         retrieval_mode: str = "vector",
-        keyword_limit: int = 6,
+        sparse_limit: int = settings.default_sparse_limit,
 ):
     results = []
     normal_count = 0
@@ -33,7 +33,7 @@ def evaluate_rerank(
             candidate_sources = hybrid_search_chunks(
                 case["question"],
                 candidate_k,
-                keyword_limit,
+                sparse_limit,
             )
         else:
             raise ValueError("retrieval_mode must be 'vector' or 'hybrid'")
@@ -42,17 +42,17 @@ def evaluate_rerank(
             source["rerank_score"]
             for source in reranked_sources
         ]
-        top_rerank_score = (
-            rerank_scores[0]
-            if rerank_scores
-            else None
-        )
+        top_rerank_score = max(rerank_scores) if rerank_scores else None
         vector_scores = [
             source.get("vector_score")
             for source in candidate_sources
         ]
-        keyword_scores = [
-            source.get("keyword_score")
+        sparse_scores = [
+            source.get("sparse_score")
+            for source in candidate_sources
+        ]
+        fusion_scores = [
+            source.get("fusion_score")
             for source in candidate_sources
         ]
         if case["should_reject"]:
@@ -65,7 +65,8 @@ def evaluate_rerank(
                     "type": "rejection",
                     "top_rerank_score": top_rerank_score,
                     "vector_scores": vector_scores,
-                    "keyword_scores": keyword_scores,
+                    "sparse_scores": sparse_scores,
+                    "fusion_scores": fusion_scores,
                     "rerank_scores": rerank_scores,
                 }
             )
@@ -100,7 +101,8 @@ def evaluate_rerank(
             "candidate_pages": candidate_pages,
             "reranked_pages": reranked_pages,
             "vector_scores": vector_scores,
-            "keyword_scores": keyword_scores,
+            "sparse_scores": sparse_scores,
+            "fusion_scores": fusion_scores,
             "rerank_scores": rerank_scores,
         })
 
@@ -118,7 +120,7 @@ def evaluate_rerank(
             "rerank_top_k": rerank_top_k,
             "rerank_min_score": rerank_min_score,
             "retrieval_mode": retrieval_mode,
-            "keyword_limit": keyword_limit,
+            "sparse_limit": sparse_limit,
         },
         "metrics": {
             "candidate_hit_rate": round(candidate_hit_rate, 4),
@@ -141,14 +143,14 @@ def run_rerank_retrieval_evaluation(
         rerank_top_k,
         rerank_min_score,
         retrieval_mode,
-        keyword_limit,
+        sparse_limit,
 ):
     evaluation = evaluate_rerank(
         candidate_k=candidate_k,
         rerank_top_k=rerank_top_k,
         rerank_min_score=rerank_min_score,
         retrieval_mode=retrieval_mode,
-        keyword_limit=keyword_limit,
+        sparse_limit=sparse_limit,
     )
 
     print(evaluation["metrics"])
@@ -198,10 +200,11 @@ def parse_args(argv=None):
     )
 
     parser.add_argument(
-        "--keyword-limit",
+        "--sparse-limit", "--keyword-limit",
+        dest="sparse_limit",
         type=int,
-        default=6,
-        help="Number of keyword candidates in hybrid mode.",
+        default=settings.default_sparse_limit,
+        help="Number of sparse lexical candidates in hybrid mode.",
     )
 
     parser.add_argument(
@@ -218,7 +221,7 @@ def compare_rerank_retrieval_modes(
         candidate_k=settings.default_candidate_k,
         rerank_top_k=settings.default_rerank_top_k,
         rerank_min_score=settings.default_rerank_min_score,
-        keyword_limit=6,
+        sparse_limit=settings.default_sparse_limit,
 ):
     comparison_results = []
 
@@ -228,7 +231,7 @@ def compare_rerank_retrieval_modes(
             rerank_top_k=rerank_top_k,
             rerank_min_score=rerank_min_score,
             retrieval_mode=mode,
-            keyword_limit=keyword_limit,
+            sparse_limit=sparse_limit,
         )
 
         metrics = evaluation["metrics"]
@@ -238,7 +241,7 @@ def compare_rerank_retrieval_modes(
             "candidate_k": candidate_k,
             "rerank_top_k": rerank_top_k,
             "rerank_min_score": rerank_min_score,
-            "keyword_limit": keyword_limit,
+            "sparse_limit": sparse_limit,
             "candidate_hit_rate": metrics["candidate_hit_rate"],
             "rerank_hit_rate": metrics["rerank_hit_rate"],
             "rerank_rejection_accuracy": metrics["rerank_rejection_accuracy"],
@@ -251,13 +254,13 @@ def run_rerank_retrieval_mode_comparison(
         candidate_k,
         rerank_top_k,
         rerank_min_score,
-        keyword_limit,
+        sparse_limit,
 ):
     comparison_results = compare_rerank_retrieval_modes(
         candidate_k=candidate_k,
         rerank_top_k=rerank_top_k,
         rerank_min_score=rerank_min_score,
-        keyword_limit=keyword_limit,
+        sparse_limit=sparse_limit,
     )
 
     for result in comparison_results:
@@ -283,12 +286,12 @@ if __name__ == "__main__":
             rerank_top_k=args.rerank_top_k,
             rerank_min_score=args.rerank_min_score,
             retrieval_mode=args.retrieval_mode,
-            keyword_limit=args.keyword_limit,
+            sparse_limit=args.sparse_limit,
         )
     else:
         run_rerank_retrieval_mode_comparison(
             candidate_k=args.candidate_k,
             rerank_top_k=args.rerank_top_k,
             rerank_min_score=args.rerank_min_score,
-            keyword_limit=args.keyword_limit,
+            sparse_limit=args.sparse_limit,
         )

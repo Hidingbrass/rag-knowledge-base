@@ -23,7 +23,7 @@ def test_evaluate_generation_rerank_passes_hybrid_config(monkeypatch):
                     "page_number": 1,
                     "chunk_index": 0,
                     "vector_score": 0.8,
-                    "keyword_score": 1,
+                    "fusion_score": 0.75,
                     "rerank_score": 0.9,
                 }
             ],
@@ -44,14 +44,14 @@ def test_evaluate_generation_rerank_passes_hybrid_config(monkeypatch):
         rerank_top_k=3,
         rerank_min_score=0.75,
         retrieval_mode="hybrid",
-        keyword_limit=5,
+        sparse_limit=5,
     )
 
     request = captured_requests[0]
 
     assert request.retrieval_mode == "hybrid"
-    assert request.keyword_limit == 5
+    assert request.sparse_limit == 5
     assert evaluation["config"]["retrieval_mode"] == "hybrid"
-    assert evaluation["config"]["keyword_limit"] == 5
+    assert evaluation["config"]["sparse_limit"] == 5
     assert evaluation["results"][0]["candidate_retrieval_mode"] == "hybrid"
     assert evaluation["results"][0]["retrieval_mode"] == "rerank"

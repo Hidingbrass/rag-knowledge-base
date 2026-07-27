@@ -1,6 +1,7 @@
 import argparse
 
 from app.evaluation.cases import TEST_CASES
+from app.evaluation.datasets import DATASET_NAMES, load_evaluation_cases
 from app.core.config import settings
 from app.evaluation.utils import (
     average_metric,
@@ -14,6 +15,7 @@ from app.evaluation.utils import (
 )
 from app.schemas.rag import RerankRagChatRequest
 from app.services.rag_service import rag_chat_with_rerank_response
+from app.services.model_runtime import collect_model_usage, current_model_usage
 
 RERANK_MIN_SCORE_VALUES = [0.72, 0.75, 0.78]
 
@@ -25,7 +27,10 @@ def evaluate_generation_rerank(
         fallback_min_score: float = settings.default_fallback_min_score,
         slow_rerank_threshold: float = settings.slow_rerank_threshold,
         retrieval_mode: str = "vector",
-        keyword_limit: int = 6,
+        sparse_limit: int = settings.default_sparse_limit,
+        dataset_name: str = "legacy",
+        cases: list[dict] | None = None,
+        generation_model: str | None = None,
 ):
     """评测回答关键词、拒答行为和引用编号是否合法。"""
     results = []
@@ -55,8 +60,19 @@ def evaluate_generation_rerank(
     max_rerank_elapsed_seconds = 0.0
 
     slow_rerank_count = 0
+    total_tokens = 0
+    estimated_cost_yuan = 0.0
+    rejection_true_positive = 0
+    rejection_false_positive = 0
+    rejection_false_negative = 0
+    selected_cases = (
+        cases
+        if cases is not None
+        else TEST_CASES if dataset_name == "legacy"
+        else load_evaluation_cases(dataset_name)
+    )
 
-    for case in TEST_CASES:
+    for case in selected_cases:
         # 使用同一组检索参数运行完整 RAG 问答。
         request = RerankRagChatRequest(
             question=case["question"],
@@ -65,10 +81,21 @@ def evaluate_generation_rerank(
             rerank_min_score=rerank_min_score,
             fallback_min_score=fallback_min_score,
             retrieval_mode=retrieval_mode,
-            keyword_limit=keyword_limit,
+            sparse_limit=sparse_limit,
         )
 
-        response = rag_chat_with_rerank_response(request)
+        with collect_model_usage():
+            response = (
+                rag_chat_with_rerank_response(
+                    request,
+                    generation_model=generation_model,
+                )
+                if generation_model
+                else rag_chat_with_rerank_response(request)
+            )
+            usage = current_model_usage()
+        total_tokens += usage["total_tokens"]
+        estimated_cost_yuan += usage["estimated_cost_yuan"]
         answer = response["answer"]
 
         sources = response["sources"]
@@ -114,6 +141,9 @@ def evaluate_generation_rerank(
 
             if rejection_passed:
                 rejection_correct += 1
+                rejection_true_positive += 1
+            else:
+                rejection_false_negative += 1
 
             results.append(
                 {
@@ -130,6 +160,8 @@ def evaluate_generation_rerank(
 
             continue
         # 被引用的资料合并
+        if is_rejection_answer(answer):
+            rejection_false_positive += 1
         chunk_support = calculate_chunk_support_rate(
             case["expected_keywords"],
             cited_sources,
@@ -190,7 +222,7 @@ def evaluate_generation_rerank(
                 "rerank_elapsed_seconds": rounded_rerank_elapsed_seconds,
                 "candidate_retrieval_mode": retrieval_mode,
                 "retrieval_mode": response_retrieval_mode,
-                "keyword_limit": keyword_limit,
+                "sparse_limit": sparse_limit,
             }
         )
 
@@ -213,6 +245,18 @@ def evaluate_generation_rerank(
     average_rerank_elapsed_seconds = calculate_rate(
         rerank_elapsed_sum,
         rerank_elapsed_count,
+    )
+    rejection_precision = calculate_rate(
+        rejection_true_positive,
+        rejection_true_positive + rejection_false_positive,
+    )
+    rejection_recall = calculate_rate(
+        rejection_true_positive,
+        rejection_true_positive + rejection_false_negative,
+    )
+    rejection_f1 = calculate_rate(
+        2 * rejection_precision * rejection_recall,
+        rejection_precision + rejection_recall,
     )
 
     return {
@@ -239,15 +283,22 @@ def evaluate_generation_rerank(
             "rerank_elapsed_count": rerank_elapsed_count,
             "slow_rerank_count": slow_rerank_count,
             "slow_rerank_rate": round(slow_rerank_rate, 4),
+            "rejection_precision": round(rejection_precision, 4),
+            "rejection_recall": round(rejection_recall, 4),
+            "rejection_f1": round(rejection_f1, 4),
+            "total_tokens": total_tokens,
+            "estimated_cost_yuan": round(estimated_cost_yuan, 6),
         },
         "config": {
+            "dataset": dataset_name,
+            "generation_model": generation_model or settings.chat_model,
             "candidate_k": candidate_k,
             "rerank_top_k": rerank_top_k,
             "rerank_min_score": rerank_min_score,
             "fallback_min_score": fallback_min_score,
             "slow_rerank_threshold": slow_rerank_threshold,
             "retrieval_mode": retrieval_mode,
-            "keyword_limit": keyword_limit,
+            "sparse_limit": sparse_limit,
         }
     }
 
@@ -294,14 +345,14 @@ def run_single_rerank_generation_evaluation(
         rerank_top_k,
         rerank_min_score,
         retrieval_mode,
-        keyword_limit,
+        sparse_limit,
 ):
     evaluation = evaluate_generation_rerank(
         candidate_k=candidate_k,
         rerank_top_k=rerank_top_k,
         rerank_min_score=rerank_min_score,
         retrieval_mode=retrieval_mode,
-        keyword_limit=keyword_limit,
+        sparse_limit=sparse_limit,
     )
 
     print(evaluation["metrics"])
@@ -320,6 +371,18 @@ def run_single_rerank_generation_evaluation(
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(
         description="Run Rerank generation evaluation.",
+    )
+
+    parser.add_argument(
+        "--dataset",
+        choices=DATASET_NAMES,
+        default="legacy",
+    )
+
+    parser.add_argument(
+        "--generation-model",
+        default=settings.chat_model,
+        help="DashScope OpenAI-compatible generation model.",
     )
 
     parser.add_argument(
@@ -371,9 +434,10 @@ def parse_args(argv=None):
     )
 
     parser.add_argument(
-        "--keyword-limit",
+        "--sparse-limit", "--keyword-limit",
+        dest="sparse_limit",
         type=int,
-        default=6,
+        default=settings.default_sparse_limit,
     )
 
     return parser.parse_args(argv)
@@ -388,7 +452,9 @@ if __name__ == "__main__":
             rerank_top_k=args.rerank_top_k,
             rerank_min_score=args.rerank_min_score,
             retrieval_mode=args.retrieval_mode,
-            keyword_limit=args.keyword_limit,
+            sparse_limit=args.sparse_limit,
+            dataset_name=args.dataset,
+            generation_model=args.generation_model,
         )
 
     elif args.mode == "comparison":

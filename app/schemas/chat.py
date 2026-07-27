@@ -8,6 +8,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from app.core.config import settings
+
 
 class ChatMessage(BaseModel):
     """一条历史聊天消息。
@@ -18,7 +20,7 @@ class ChatMessage(BaseModel):
     """
 
     role: Literal["user", "assistant"]
-    content: str
+    content: str = Field(min_length=1, max_length=settings.max_question_chars)
 
 
 class ChatRequest(BaseModel):
@@ -31,5 +33,5 @@ class ChatRequest(BaseModel):
     history 使用 default_factory=list，避免多个请求共享同一个默认列表。
     """
 
-    question: str
-    history: list[ChatMessage] = Field(default_factory=list)
+    question: str = Field(min_length=1, max_length=settings.max_question_chars)
+    history: list[ChatMessage] = Field(default_factory=list, max_length=20)

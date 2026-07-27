@@ -13,10 +13,8 @@ public record CreateKnowledgeBaseRequest(
 
         String description,
 
-        @NotBlank(message = "创建者不能为空")
         String ownerId,
 
-        @NotBlank(message = "部门不能为空")
         String department
 ) {
 }

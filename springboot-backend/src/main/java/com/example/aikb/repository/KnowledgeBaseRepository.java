@@ -18,4 +18,6 @@ import java.util.UUID;
  */
 public interface KnowledgeBaseRepository extends JpaRepository<KnowledgeBase, UUID> {
     List<KnowledgeBase> findAllByOrderByCreatedAtDesc();
+
+    List<KnowledgeBase> findByOwnerIdOrderByCreatedAtDesc(String ownerId);
 }

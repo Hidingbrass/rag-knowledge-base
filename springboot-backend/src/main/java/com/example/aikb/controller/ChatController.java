@@ -6,8 +6,15 @@ import com.example.aikb.dto.chat.ChatMessageResponse;
 import com.example.aikb.dto.chat.ChatSessionResponse;
 import com.example.aikb.dto.chat.CreateChatSessionRequest;
 import com.example.aikb.dto.fastapi.FastApiRagResponse;
+import com.example.aikb.exception.BusinessException;
+import com.example.aikb.security.AuthenticatedUser;
 import com.example.aikb.service.ChatService;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.validation.Valid;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -15,9 +22,17 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
+import java.io.IOException;
+import java.io.OutputStream;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.UUID;
+
+import static com.example.aikb.common.CurrentUserIdentity.departmentOrRequestParam;
+import static com.example.aikb.common.CurrentUserIdentity.userIdOrRequestParam;
 
 /**
  * 聊天会话接口。
@@ -30,17 +45,18 @@ import java.util.UUID;
  * <p>
  * 真正的业务流程，比如保存用户问题、调用 FastAPI、保存 AI 回答，都放在 ChatService。
  *
- * 当前学习版暂时用 userId + department 模拟登录身份。
- * 后续接入真正登录后，这两个参数通常会从 Token / SecurityContext 中取得。
+ * 生产环境从 JWT / SecurityContext 读取用户身份；userId + department 仅保留给显式开启的 legacy 调试模式。
  */
 @RestController
 @RequestMapping("/api/chat")
 public class ChatController {
 
     private final ChatService chatService;
+    private final ObjectMapper objectMapper;
 
-    public ChatController(ChatService chatService) {
+    public ChatController(ChatService chatService, ObjectMapper objectMapper) {
         this.chatService = chatService;
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -51,10 +67,16 @@ public class ChatController {
      */
     @PostMapping("/sessions")
     public ApiResponse<ChatSessionResponse> createSession(
+            @AuthenticationPrincipal AuthenticatedUser currentUser,
             @Valid @RequestBody CreateChatSessionRequest request
     ) {
         return ApiResponse.ok(ChatSessionResponse.from(
-                chatService.createSession(request)
+                chatService.createSession(new CreateChatSessionRequest(
+                        request.knowledgeBaseId(),
+                        userIdOrRequestParam(currentUser, request.userId()),
+                        departmentOrRequestParam(currentUser, request.department()),
+                        request.title()
+                ))
         ));
     }
 
@@ -65,11 +87,18 @@ public class ChatController {
      * userId + department 用来校验当前用户是否能访问该会话所属知识库。
      */
     @GetMapping("/sessions/{sessionId}")
-    public ApiResponse<ChatSessionResponse> getSession(@PathVariable UUID sessionId,
-                                                       @RequestParam String userId,
-                                                       @RequestParam String department) {
+    public ApiResponse<ChatSessionResponse> getSession(
+            @AuthenticationPrincipal AuthenticatedUser currentUser,
+            @PathVariable UUID sessionId,
+            @RequestParam(required = false) String userId,
+            @RequestParam(required = false) String department
+    ) {
         return ApiResponse.ok(ChatSessionResponse.from(
-                chatService.getRequiredSessionWithAccess(sessionId, userId, department)
+                chatService.getRequiredSessionWithAccess(
+                        sessionId,
+                        userIdOrRequestParam(currentUser, userId),
+                        departmentOrRequestParam(currentUser, department)
+                )
         ));
     }
 
@@ -83,8 +112,11 @@ public class ChatController {
      * 而是从登录态里拿当前用户 ID。
      */
     @GetMapping("/sessions")
-    public ApiResponse<List<ChatSessionResponse>> listSessions(@RequestParam String userId) {
-        List<ChatSessionResponse> responses = chatService.listSessionsByUserId(userId)
+    public ApiResponse<List<ChatSessionResponse>> listSessions(
+            @AuthenticationPrincipal AuthenticatedUser currentUser,
+            @RequestParam(required = false) String userId
+    ) {
+        List<ChatSessionResponse> responses = chatService.listSessionsByUserId(userIdOrRequestParam(currentUser, userId))
                 .stream()
                 .map(ChatSessionResponse::from)
                 .toList();
@@ -99,10 +131,17 @@ public class ChatController {
      * 返回前会先校验当前用户是否能访问该会话，避免只凭 sessionId 读取别人的聊天记录。
      */
     @GetMapping("/sessions/{sessionId}/messages")
-    public ApiResponse<List<ChatMessageResponse>> listMessages(@PathVariable UUID sessionId,
-                                                               @RequestParam String userId,
-                                                               @RequestParam String department) {
-        List<ChatMessageResponse> responses = chatService.listMessages(sessionId, userId, department)
+    public ApiResponse<List<ChatMessageResponse>> listMessages(
+            @AuthenticationPrincipal AuthenticatedUser currentUser,
+            @PathVariable UUID sessionId,
+            @RequestParam(required = false) String userId,
+            @RequestParam(required = false) String department
+    ) {
+        List<ChatMessageResponse> responses = chatService.listMessages(
+                        sessionId,
+                        userIdOrRequestParam(currentUser, userId),
+                        departmentOrRequestParam(currentUser, department)
+                )
                 .stream()
                 .map(ChatMessageResponse::from)
                 .toList();
@@ -126,17 +165,89 @@ public class ChatController {
      */
     @PostMapping("/sessions/{sessionId}/ask")
     public ApiResponse<FastApiRagResponse> ask(
+            @AuthenticationPrincipal AuthenticatedUser currentUser,
             @PathVariable UUID sessionId,
-            @RequestParam String userId,
-            @RequestParam String department,
+            @RequestParam(required = false) String userId,
+            @RequestParam(required = false) String department,
             @Valid @RequestBody AskInSessionRequest request
     ) {
         return ApiResponse.ok(chatService.ask(
                 sessionId,
-                userId,
-                department,
+                userIdOrRequestParam(currentUser, userId),
+                departmentOrRequestParam(currentUser, department),
                 request.question(),
                 request.documentId()
         ));
+    }
+
+    /**
+     * 流式 RAG 问答入口。
+     *
+     * 权限、文档归属和限流校验在响应头发送前完成；通过后以 NDJSON 逐行返回
+     * accepted/status/sources/delta/done/error 事件。
+     */
+    @PostMapping(
+            value = "/sessions/{sessionId}/ask/stream",
+            produces = "application/x-ndjson"
+    )
+    public ResponseEntity<StreamingResponseBody> askStream(
+            @AuthenticationPrincipal AuthenticatedUser currentUser,
+            @PathVariable UUID sessionId,
+            @RequestParam(required = false) String userId,
+            @RequestParam(required = false) String department,
+            @Valid @RequestBody AskInSessionRequest request
+    ) {
+        ChatService.StreamingAsk prepared = chatService.prepareStreamingAsk(
+                sessionId,
+                userIdOrRequestParam(currentUser, userId),
+                departmentOrRequestParam(currentUser, department),
+                request.question(),
+                request.documentId()
+        );
+
+        StreamingResponseBody stream = outputStream -> {
+            try {
+                var acceptedEvent = objectMapper.createObjectNode();
+                acceptedEvent.put("type", "accepted");
+                acceptedEvent.set(
+                        "message",
+                        objectMapper.valueToTree(ChatMessageResponse.from(prepared.userMessage()))
+                );
+                writeEvent(outputStream, acceptedEvent);
+
+                chatService.streamAnswer(
+                        prepared,
+                        event -> {
+                            try {
+                                writeEvent(outputStream, event);
+                            } catch (IOException exception) {
+                                throw new UncheckedIOException(exception);
+                            }
+                        }
+                );
+            } catch (UncheckedIOException exception) {
+                throw exception.getCause();
+            } catch (Exception exception) {
+                String message = exception instanceof BusinessException
+                        ? exception.getMessage()
+                        : "AI 回答生成失败，请稍后重试";
+                var errorEvent = objectMapper.createObjectNode();
+                errorEvent.put("type", "error");
+                errorEvent.put("message", message);
+                writeEvent(outputStream, errorEvent);
+            }
+        };
+
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType("application/x-ndjson"))
+                .header("Cache-Control", "no-cache, no-transform")
+                .header("X-Accel-Buffering", "no")
+                .body(stream);
+    }
+
+    private void writeEvent(OutputStream outputStream, JsonNode event) throws IOException {
+        outputStream.write(objectMapper.writeValueAsString(event).getBytes(StandardCharsets.UTF_8));
+        outputStream.write('\n');
+        outputStream.flush();
     }
 }

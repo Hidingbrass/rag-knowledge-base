@@ -24,6 +24,18 @@ public record FastApiDocumentIndexResponse(
         String collection,
 
         @JsonProperty("file_hash")
-        String fileHash
-) {
+        String fileHash,
+
+        @JsonProperty("model_usage")
+        FastApiModelUsage modelUsage
+) implements FastApiUsageCarrier {
+    public FastApiDocumentIndexResponse(
+            String documentId,
+            String filename,
+            int chunkCount,
+            String collection,
+            String fileHash
+    ) {
+        this(documentId, filename, chunkCount, collection, fileHash, null);
+    }
 }

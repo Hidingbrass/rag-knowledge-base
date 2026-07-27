@@ -12,7 +12,7 @@ import java.util.UUID;
  * 知识库数据库实体。
  *
  * Entity 表示“Java 对象”和“MySQL 表”的映射关系。
- * 这张表保存知识库本身的业务信息，例如名称、创建人、所属部门。
+ * 这张表保存知识库本身的业务信息，例如名称、创建人、学习方向（department 兼容字段）。
  *
  * 注意：这里保留 id()、name() 这类方法，是为了兼容项目里已经写好的 DTO 和 Service。
  * JPA 本身通常使用 getId() 这种 getter，但这里先减少迁移成本。
@@ -80,5 +80,11 @@ public class KnowledgeBase {
 
     public Instant createdAt() {
         return createdAt;
+    }
+
+    public void updateDetails(String name, String description, String department) {
+        this.name = name;
+        this.description = description;
+        this.department = department;
     }
 }

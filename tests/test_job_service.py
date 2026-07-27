@@ -5,6 +5,7 @@ from app.schemas.job import (
     InterviewPrepRequest,
     JdParseRequest,
     JobAnalyzeRequest,
+    JobDeliveryPackageRequest,
     ResumeOptimizeRequest,
     ResumeParseRequest,
     StarInterviewAnswerRequest,
@@ -51,6 +52,23 @@ def test_parse_job_analyze_response_accepts_json_code_block():
     assert result.interview_questions == ["你如何设计文档重复检测？"]
 
 
+def test_parse_job_analyze_response_rejects_score_outside_range():
+    raw_answer = """
+    {
+      "match_score": 150,
+      "matched_skills": [],
+      "missing_skills": [],
+      "strengths": [],
+      "risks": [],
+      "suggestions": [],
+      "interview_questions": []
+    }
+    """
+
+    with pytest.raises(BadRequestError, match="字段不符合要求"):
+        job_service.parse_job_analyze_response(raw_answer)
+
+
 def test_analyze_job_match_calls_chat_completion(monkeypatch):
     def fake_chat_completion(messages):
         assert messages[0]["role"] == "system"
@@ -86,6 +104,83 @@ def test_analyze_job_match_rejects_empty_resume():
             JobAnalyzeRequest(
                 resume_text="   ",
                 job_description="需要 Java 和 Spring Boot",
+            )
+        )
+
+
+def test_build_job_delivery_package_messages_contains_resume_and_jd():
+    request = JobDeliveryPackageRequest(
+        resume_text="我做过 Spring Boot + FastAPI 企业知识库 RAG 项目。",
+        job_description="岗位要求熟悉 Java、Spring Boot、RAG 和大模型应用。",
+    )
+
+    messages = job_service.build_job_delivery_package_messages(request)
+
+    assert messages[0]["role"] == "system"
+    assert "求职成品包" in messages[0]["content"]
+    assert "project_pitch" in messages[0]["content"]
+    assert messages[1]["role"] == "user"
+    assert "企业知识库 RAG 项目" in messages[1]["content"]
+    assert "大模型应用" in messages[1]["content"]
+
+
+def test_parse_job_delivery_package_response_accepts_json_code_block():
+    raw_answer = """
+    ```json
+    {
+      "target_position": "Java 后端开发工程师",
+      "self_introduction": "面试官您好，我主要做 Java 后端和 AI 应用。",
+      "project_pitch": "我重点介绍企业知识库 RAG 项目。",
+      "architecture_talking_points": ["Spring Boot 负责业务层", "FastAPI 负责 AI 服务"],
+      "risk_response": ["Redis 经验可以结合限流和防重复提交说明"],
+      "closing_statement": "我希望把后端工程能力和 AI 应用落地结合起来。",
+      "rehearsal_checklist": ["练熟 RAG 全链路", "准备权限控制细节"]
+    }
+    ```
+    """
+
+    result = job_service.parse_job_delivery_package_response(raw_answer)
+
+    assert result.target_position == "Java 后端开发工程师"
+    assert "RAG 项目" in result.project_pitch
+    assert result.architecture_talking_points == ["Spring Boot 负责业务层", "FastAPI 负责 AI 服务"]
+
+
+def test_generate_job_delivery_package_calls_chat_completion(monkeypatch):
+    def fake_chat_completion(messages):
+        assert messages[0]["role"] == "system"
+        assert messages[1]["role"] == "user"
+        return """
+        {
+          "target_position": "AI 应用开发工程师",
+          "self_introduction": "我有 RAG 项目经验。",
+          "project_pitch": "项目实现了文档入库、向量检索和问答。",
+          "architecture_talking_points": ["MySQL 保存业务数据", "Qdrant 保存向量"],
+          "risk_response": ["高并发经验可以结合 Redis 限流说明"],
+          "closing_statement": "我希望继续做 AI 应用落地。",
+          "rehearsal_checklist": ["讲清楚 Rerank", "讲清楚权限边界"]
+        }
+        """
+
+    monkeypatch.setattr(job_service, "chat_completion", fake_chat_completion)
+
+    result = job_service.generate_job_delivery_package(
+        JobDeliveryPackageRequest(
+            resume_text="RAG 项目",
+            job_description="AI 应用岗位",
+        )
+    )
+
+    assert result.target_position == "AI 应用开发工程师"
+    assert "Redis 限流" in result.risk_response[0]
+
+
+def test_generate_job_delivery_package_rejects_empty_jd():
+    with pytest.raises(BadRequestError):
+        job_service.generate_job_delivery_package(
+            JobDeliveryPackageRequest(
+                resume_text="RAG 项目",
+                job_description="   ",
             )
         )
 
@@ -345,7 +440,9 @@ def test_optimize_resume_calls_chat_completion(monkeypatch):
     assert result.rewrite_suggestions[0].keywords_added == ["Embedding", "Rerank", "Chat"]
 
 
-def test_optimize_resume_rejects_empty_resume_or_jd():
+def test_optimize_resume_rejects_empty_resume_but_allows_general_mode_without_jd(
+        monkeypatch,
+):
     with pytest.raises(BadRequestError):
         job_service.optimize_resume(
             ResumeOptimizeRequest(
@@ -354,13 +451,31 @@ def test_optimize_resume_rejects_empty_resume_or_jd():
             )
         )
 
-    with pytest.raises(BadRequestError):
-        job_service.optimize_resume(
-            ResumeOptimizeRequest(
-                resume_text="我做过 Java 项目。",
-                job_description="   ",
-            )
+    def fake_chat_completion(messages):
+        assert "通用简历质量优化" in messages[0]["content"]
+        assert "未提供，请按通用简历优化模式处理" in messages[1]["content"]
+        return """
+        {
+          "summary": "增强结果量化和技术深度表达。",
+          "target_position": "通用求职简历",
+          "gap_summary": ["成果缺少量化"],
+          "rewrite_suggestions": [],
+          "missing_keywords": [],
+          "action_items": ["补充可验证指标"]
+        }
+        """
+
+    monkeypatch.setattr(job_service, "chat_completion", fake_chat_completion)
+
+    result = job_service.optimize_resume(
+        ResumeOptimizeRequest(
+            resume_text="我做过 Java 项目。",
+            job_description="   ",
         )
+    )
+
+    assert result.target_position == "通用求职简历"
+    assert result.action_items == ["补充可验证指标"]
 
 
 def test_build_interview_prep_messages_contains_resume_jd_and_schema_fields():
@@ -422,6 +537,28 @@ def test_parse_interview_prep_response_accepts_json_code_block():
     assert result.technical_questions[0].question == "RAG 中如何减少幻觉？"
     assert result.behavioral_questions[0].answer_points == ["描述问题", "说明排查过程", "总结结果"]
     assert result.questions_to_ask == ["团队目前 AI 应用主要落在哪些业务场景？"]
+
+
+def test_parse_interview_prep_response_accepts_multiline_string_and_extra_object():
+    raw_answer = """
+    下面是结果：
+    {
+      "target_position": "Java 后端开发工程师",
+      "self_introduction": "第一行
+第二行",
+      "project_talking_points": [],
+      "technical_questions": [],
+      "behavioral_questions": [],
+      "questions_to_ask": [],
+      "preparation_checklist": []
+    }
+    调试信息：{"ignored": true}
+    """
+
+    result = job_service.parse_interview_prep_response(raw_answer)
+
+    assert result.target_position == "Java 后端开发工程师"
+    assert result.self_introduction == "第一行\n第二行"
 
 
 def test_prepare_interview_calls_chat_completion(monkeypatch):

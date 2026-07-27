@@ -1,302 +1,166 @@
-"""qdrant_service.search_chunks 的单元测试。
-
-这里不连接真实 Qdrant，也不调用真实 Embedding。
-测试通过 monkeypatch 替换：
-- create_embedding：固定返回一个假向量。
-- qdrant_client.query_points：固定返回几个假 points。
-
-重点验证 search_chunks 的输出结构：
-- RAG 链路使用 vector_score。
-- 不返回 /search/demo 独立使用的 score 字段。
-- document_id 会被传给 Qdrant 查询过滤条件。
-"""
+"""Unit tests for dense, sparse and Hybrid RRF Qdrant retrieval."""
 
 from types import SimpleNamespace
+
+import pytest
+from qdrant_client import QdrantClient
+from qdrant_client.models import Fusion, FusionQuery, SparseVector
 
 from app.services import qdrant_service
 
 
-def test_search_chunks_returns_rag_source_with_vector_score(monkeypatch):
-    """search_chunks 应返回 RAG Source，并使用 vector_score 字段。"""
-    captured_query = {}
-
-    def fake_create_embedding(question):
-        captured_query["question"] = question
-        return [0.1, 0.2, 0.3]
-
-    class FakeQdrantClient:
-        """只模拟 query_points 这一个测试需要的方法。"""
-
-        def query_points(self, collection_name, query, limit, query_filter):
-            captured_query["collection_name"] = collection_name
-            captured_query["query"] = query
-            captured_query["limit"] = limit
-            captured_query["query_filter"] = query_filter
-
-            return SimpleNamespace(
-                points=[
-                    SimpleNamespace(
-                        score=0.87654,
-                        payload={
-                            "document_id": "doc-1",
-                            "text": "chunk text",
-                            "filename": "demo.pdf",
-                            "chunk_index": 4,
-                            "page_number": 2,
-                        },
-                    )
-                ]
-            )
-
-    monkeypatch.setattr(qdrant_service, "create_embedding", fake_create_embedding)
-    monkeypatch.setattr(qdrant_service, "qdrant_client", FakeQdrantClient())
-
-    sources = qdrant_service.search_chunks(
-        question="测试问题",
-        top_k=3,
-        document_id="doc-1",
-    )
-
-    assert captured_query["question"] == "测试问题"
-    assert captured_query["query"] == [0.1, 0.2, 0.3]
-    assert captured_query["limit"] == 3
-    assert captured_query["query_filter"] is not None
-
-    assert sources == [
-        {
-            "document_id": "doc-1",
-            "vector_score": 0.8765,
-            "text": "chunk text",
-            "filename": "demo.pdf",
-            "chunk_index": 4,
-            "page_number": 2,
-        }
-    ]
-    assert "score" not in sources[0]
-
-
-def test_extract_keywords_keeps_chinese_and_english_terms():
-    keywords = qdrant_service.extract_keywords("Redis 在项目中可以用于哪些场景？")
-
-    assert "Redis" in keywords
-    assert "在项目中可以用于哪些场景" in keywords
-
-
-def test_keyword_search_chunks_returns_sorted_keyword_sources(monkeypatch):
-    captured_scroll = {}
-
-    class FakeQdrantClient:
-        def scroll(
-                self,
-                collection_name,
-                scroll_filter,
-                limit,
-                with_payload,
-                with_vectors,
-        ):
-            captured_scroll["collection_name"] = collection_name
-            captured_scroll["scroll_filter"] = scroll_filter
-            captured_scroll["limit"] = limit
-            captured_scroll["with_payload"] = with_payload
-            captured_scroll["with_vectors"] = with_vectors
-
-            return (
-                [
-                    SimpleNamespace(
-                        payload={
-                            "document_id": "doc-1",
-                            "text": "Redis cache data",
-                            "filename": "demo.pdf",
-                            "chunk_index": 1,
-                            "page_number": 2,
-                        }
-                    ),
-                    SimpleNamespace(
-                        payload={
-                            "document_id": "doc-2",
-                            "text": "Redis cache Redis",
-                            "filename": "demo.pdf",
-                            "chunk_index": 2,
-                            "page_number": 3,
-                        }
-                    ),
-                    SimpleNamespace(
-                        payload={
-                            "document_id": "doc-3",
-                            "text": "Qdrant vector database",
-                            "filename": "demo.pdf",
-                            "chunk_index": 3,
-                            "page_number": 4,
-                        }
-                    ),
-                ],
-                None,
-            )
-
-    monkeypatch.setattr(qdrant_service, "qdrant_client", FakeQdrantClient())
-
-    sources = qdrant_service.keyword_search_chunks("Redis cache", limit=1)
-
-    assert captured_scroll["collection_name"] == qdrant_service.COLLECTION_NAME
-    assert captured_scroll["scroll_filter"] is None
-    assert captured_scroll["limit"] == 1000
-    assert captured_scroll["with_payload"] is True
-    assert captured_scroll["with_vectors"] is False
-
-    assert sources == [
-        {
+def _point(score=0.87654):
+    return SimpleNamespace(
+        score=score,
+        payload={
             "document_id": "doc-1",
             "text": "Redis cache data",
             "filename": "demo.pdf",
-            "chunk_index": 1,
+            "chunk_index": 4,
             "page_number": 2,
-            "keyword_score": 2,
-        }
-    ]
+        },
+    )
 
 
-def test_keyword_search_chunks_passes_document_filter_to_qdrant(monkeypatch):
-    captured_scroll = {}
+def test_search_chunks_uses_named_dense_vector_and_document_filter(monkeypatch):
+    captured = {}
 
     class FakeQdrantClient:
-        def scroll(
-                self,
-                collection_name,
-                scroll_filter,
-                limit,
-                with_payload,
-                with_vectors,
-        ):
-            captured_scroll["scroll_filter"] = scroll_filter
+        def query_points(self, **kwargs):
+            captured.update(kwargs)
+            return SimpleNamespace(points=[_point()])
 
-            return ([], None)
+    monkeypatch.setattr(qdrant_service, "create_embedding", lambda question: [0.1, 0.2])
+    monkeypatch.setattr(qdrant_service, "qdrant_client", FakeQdrantClient())
+
+    sources = qdrant_service.search_chunks("测试问题", 3, "doc-1")
+
+    assert captured["query"] == [0.1, 0.2]
+    assert captured["using"] == qdrant_service.DENSE_VECTOR_NAME
+    assert captured["limit"] == 3
+    assert captured["query_filter"] is not None
+    assert sources == [{
+        "document_id": "doc-1",
+        "vector_score": 0.8765,
+        "text": "Redis cache data",
+        "filename": "demo.pdf",
+        "chunk_index": 4,
+        "page_number": 2,
+    }]
+
+
+def test_sparse_search_uses_qdrant_sparse_index(monkeypatch):
+    captured = {}
+
+    class FakeQdrantClient:
+        def query_points(self, **kwargs):
+            captured.update(kwargs)
+            return SimpleNamespace(points=[_point(1.23456)])
 
     monkeypatch.setattr(qdrant_service, "qdrant_client", FakeQdrantClient())
 
-    sources = qdrant_service.keyword_search_chunks(
-        question="Redis cache",
-        limit=1,
-        document_id="doc-1",
-    )
+    sources = qdrant_service.sparse_search_chunks("Redis 缓存", 2, "doc-1")
 
-    assert sources == []
-    assert captured_scroll["scroll_filter"] is not None
-
-
-def test_build_source_key_uses_document_id_and_chunk_index():
-    source = {
-        "document_id": "doc-1",
-        "chunk_index": 3,
-    }
-
-    assert qdrant_service.build_source_key(source) == ("doc-1", 3)
+    assert isinstance(captured["query"], SparseVector)
+    assert captured["using"] == qdrant_service.SPARSE_VECTOR_NAME
+    assert captured["query_filter"] is not None
+    assert captured["limit"] == 2
+    assert sources[0]["sparse_score"] == 1.2346
+    assert "vector_score" not in sources[0]
 
 
-def test_hybrid_search_chunks_merges_vector_and_keyword_sources(monkeypatch):
-    captured_calls = {}
+def test_hybrid_search_uses_server_side_rrf(monkeypatch):
+    captured = {}
 
-    vector_sources = [
-        {
-            "document_id": "doc-1",
-            "text": "Redis cache",
-            "filename": "demo.pdf",
-            "chunk_index": 1,
-            "page_number": 2,
-            "vector_score": 0.8,
-        },
-        {
-            "document_id": "doc-2",
-            "text": "Qdrant vector database",
-            "filename": "demo.pdf",
-            "chunk_index": 2,
-            "page_number": 3,
-            "vector_score": 0.7,
-        },
-    ]
-    keyword_sources = [
-        {
-            "document_id": "doc-1",
-            "text": "Redis cache",
-            "filename": "demo.pdf",
-            "chunk_index": 1,
-            "page_number": 2,
-            "keyword_score": 2,
-        },
-        {
-            "document_id": "doc-3",
-            "text": "Redis session",
-            "filename": "demo.pdf",
-            "chunk_index": 3,
-            "page_number": 4,
-            "keyword_score": 1,
-        },
-    ]
+    class FakeQdrantClient:
+        def query_points(self, **kwargs):
+            captured.update(kwargs)
+            return SimpleNamespace(points=[_point(0.75)])
 
-    def fake_search_chunks(question, candidate_k, document_id=None):
-        captured_calls["vector"] = {
-            "question": question,
-            "candidate_k": candidate_k,
-            "document_id": document_id,
-        }
-        return vector_sources
-
-    def fake_keyword_search_chunks(question, keyword_limit, document_id=None):
-        captured_calls["keyword"] = {
-            "question": question,
-            "keyword_limit": keyword_limit,
-            "document_id": document_id,
-        }
-        return keyword_sources
-
-    monkeypatch.setattr(qdrant_service, "search_chunks", fake_search_chunks)
-    monkeypatch.setattr(
-        qdrant_service,
-        "keyword_search_chunks",
-        fake_keyword_search_chunks,
-    )
+    monkeypatch.setattr(qdrant_service, "create_embedding", lambda question: [0.3, 0.4])
+    monkeypatch.setattr(qdrant_service, "qdrant_client", FakeQdrantClient())
 
     sources = qdrant_service.hybrid_search_chunks(
-        question="Redis",
+        "Redis 缓存",
         candidate_k=6,
-        keyword_limit=5,
+        sparse_limit=5,
         document_id="doc-1",
     )
 
-    assert captured_calls["vector"] == {
-        "question": "Redis",
-        "candidate_k": 6,
-        "document_id": "doc-1",
-    }
-    assert captured_calls["keyword"] == {
-        "question": "Redis",
-        "keyword_limit": 5,
-        "document_id": "doc-1",
-    }
+    assert len(captured["prefetch"]) == 2
+    assert captured["prefetch"][0].using == qdrant_service.DENSE_VECTOR_NAME
+    assert captured["prefetch"][0].limit == 6
+    assert captured["prefetch"][1].using == qdrant_service.SPARSE_VECTOR_NAME
+    assert captured["prefetch"][1].limit == 5
+    assert captured["prefetch"][0].filter is not None
+    assert captured["prefetch"][1].filter is not None
+    assert isinstance(captured["query"], FusionQuery)
+    assert captured["query"].fusion == Fusion.RRF
+    assert sources[0]["fusion_score"] == 0.75
 
-    assert sources == [
-        {
-            "document_id": "doc-1",
-            "text": "Redis cache",
-            "filename": "demo.pdf",
-            "chunk_index": 1,
-            "page_number": 2,
-            "vector_score": 0.8,
-            "keyword_score": 2,
-        },
-        {
-            "document_id": "doc-2",
-            "text": "Qdrant vector database",
-            "filename": "demo.pdf",
-            "chunk_index": 2,
-            "page_number": 3,
-            "vector_score": 0.7,
-        },
-        {
-            "document_id": "doc-3",
-            "text": "Redis session",
-            "filename": "demo.pdf",
-            "chunk_index": 3,
-            "page_number": 4,
-            "keyword_score": 1,
-        },
-    ]
+
+def test_upsert_writes_dense_and_sparse_named_vectors(monkeypatch):
+    captured = {}
+
+    class FakeQdrantClient:
+        def get_collections(self):
+            return SimpleNamespace(collections=[])
+
+        def create_collection(self, **kwargs):
+            captured["create"] = kwargs
+
+        def upsert(self, **kwargs):
+            captured["upsert"] = kwargs
+
+    monkeypatch.setattr(qdrant_service, "qdrant_client", FakeQdrantClient())
+
+    qdrant_service.upsert_document_chunks(
+        chunks=[{"text": "Redis 缓存", "page_number": 1}],
+        vectors=[[0.1, 0.2]],
+        filename="demo.pdf",
+        file_hash="hash",
+    )
+
+    assert qdrant_service.DENSE_VECTOR_NAME in captured["create"]["vectors_config"]
+    assert qdrant_service.SPARSE_VECTOR_NAME in captured["create"]["sparse_vectors_config"]
+    vector = captured["upsert"]["points"][0].vector
+    assert vector[qdrant_service.DENSE_VECTOR_NAME] == [0.1, 0.2]
+    assert isinstance(vector[qdrant_service.SPARSE_VECTOR_NAME], SparseVector)
+    assert vector[qdrant_service.SPARSE_VECTOR_NAME].indices
+
+
+def test_old_unnamed_vector_collection_is_rejected(monkeypatch):
+    class FakeQdrantClient:
+        def get_collections(self):
+            return SimpleNamespace(collections=[SimpleNamespace(name=qdrant_service.COLLECTION_NAME)])
+
+        def get_collection(self, collection_name):
+            params = SimpleNamespace(vectors=SimpleNamespace(size=1024), sparse_vectors={})
+            return SimpleNamespace(config=SimpleNamespace(params=params))
+
+    monkeypatch.setattr(qdrant_service, "qdrant_client", FakeQdrantClient())
+
+    with pytest.raises(RuntimeError, match="旧版单向量结构"):
+        qdrant_service.ensure_collection()
+
+
+def test_in_memory_qdrant_executes_sparse_and_rrf_queries(monkeypatch):
+    client = QdrantClient(":memory:")
+    dense_vector = [1.0, *([0.0] * (qdrant_service.settings.embedding_dimensions - 1))]
+    monkeypatch.setattr(qdrant_service, "qdrant_client", client)
+    monkeypatch.setattr(qdrant_service, "create_embedding", lambda question: dense_vector)
+
+    document_id = qdrant_service.upsert_document_chunks(
+        chunks=[{"text": "Redis 可以实现接口限流", "page_number": 1}],
+        vectors=[dense_vector],
+        filename="demo.pdf",
+        file_hash="hash",
+    )
+
+    sparse_sources = qdrant_service.sparse_search_chunks("Redis 限流", 3, document_id)
+    hybrid_sources = qdrant_service.hybrid_search_chunks("Redis 限流", 3, 3, document_id)
+
+    assert sparse_sources[0]["document_id"] == document_id
+    assert sparse_sources[0]["sparse_score"] > 0
+    assert hybrid_sources[0]["document_id"] == document_id
+    assert hybrid_sources[0]["fusion_score"] > 0

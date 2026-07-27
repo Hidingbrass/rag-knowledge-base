@@ -15,6 +15,22 @@ public record FastApiStarInterviewAnswerResponse(
         String answer,
         List<String> highlights,
         @JsonProperty("follow_up_questions")
-        List<String> followUpQuestions
-) {
+        List<String> followUpQuestions,
+        @JsonProperty("model_usage")
+        FastApiModelUsage modelUsage
+) implements FastApiUsageCarrier {
+    public FastApiStarInterviewAnswerResponse(
+            String targetPosition,
+            String question,
+            String situation,
+            String task,
+            List<String> action,
+            String result,
+            String answer,
+            List<String> highlights,
+            List<String> followUpQuestions
+    ) {
+        this(targetPosition, question, situation, task, action, result, answer,
+                highlights, followUpQuestions, null);
+    }
 }

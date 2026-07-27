@@ -1,0 +1,220 @@
+{
+  "dataset_id": "aikb-enterprise-technical-docs-v1",
+  "description": "面向 AIKB 企业技术文档库的检索评测集",
+  "cases": [
+    {
+      "id": "ARCH-SEM-001",
+      "category": "semantic",
+      "question": "业务后端和 AI 服务分别负责什么，为什么要拆成两个服务？",
+      "gold_documents": ["AIKB-ARCH-001-system-architecture.pdf"],
+      "expected_keywords": ["Spring Boot", "FastAPI", "业务状态", "AI 数据处理"],
+      "should_reject": false
+    },
+    {
+      "id": "ARCH-CMP-002",
+      "category": "comparison",
+      "question": "MySQL、Qdrant 和 Redis 在平台中各自保存什么？",
+      "gold_documents": ["AIKB-ARCH-001-system-architecture.pdf"],
+      "expected_keywords": ["结构化业务", "Chunk", "向量", "限流", "上传防重复锁"],
+      "should_reject": false
+    },
+    {
+      "id": "ARCH-WORKFLOW-003",
+      "category": "workflow",
+      "question": "PDF 从上传到变成 AVAILABLE 经历哪些步骤？",
+      "gold_documents": ["AIKB-ARCH-001-system-architecture.pdf"],
+      "expected_keywords": ["JWT", "PROCESSING", "Embedding", "Qdrant", "AVAILABLE"],
+      "should_reject": false
+    },
+    {
+      "id": "ARCH-EXACT-004",
+      "category": "exact_term",
+      "question": "Spring Boot 容器调用 FastAPI 使用哪个内部地址？",
+      "gold_documents": ["AIKB-ARCH-001-system-architecture.pdf"],
+      "expected_keywords": ["http://api:8000"],
+      "should_reject": false
+    },
+    {
+      "id": "RAG-EXACT-005",
+      "category": "exact_term",
+      "question": "新版 Hybrid Qdrant Collection 的默认名称是什么？",
+      "gold_documents": ["AIKB-RAG-002-hybrid-retrieval.pdf"],
+      "expected_keywords": ["rag_chunks_hybrid_v1"],
+      "should_reject": false
+    },
+    {
+      "id": "RAG-LEXICAL-006",
+      "category": "lexical",
+      "question": "Sparse Lexical Encoder 如何处理英文技术词和连续中文？",
+      "gold_documents": ["AIKB-RAG-002-hybrid-retrieval.pdf"],
+      "expected_keywords": ["英文技术 Token", "bi-gram", "tri-gram", "BLAKE2b"],
+      "should_reject": false
+    },
+    {
+      "id": "RAG-BOUNDARY-007",
+      "category": "boundary",
+      "question": "为什么当前稀疏检索不能宣称是完整 BM25？",
+      "gold_documents": ["AIKB-RAG-002-hybrid-retrieval.pdf"],
+      "expected_keywords": ["文档长度", "归一化", "TF", "IDF"],
+      "should_reject": false
+    },
+    {
+      "id": "RAG-FALLBACK-008",
+      "category": "failure_recovery",
+      "question": "Hybrid 候选的 Rerank API 失败后系统如何回退？",
+      "gold_documents": ["AIKB-RAG-002-hybrid-retrieval.pdf"],
+      "expected_keywords": ["vector_fallback", "Dense 检索", "fallback_min_score"],
+      "should_reject": false
+    },
+    {
+      "id": "RAG-SCORE-009",
+      "category": "score_semantics",
+      "question": "fusion_score 为什么不能直接使用向量 min_score 过滤？",
+      "gold_documents": ["AIKB-RAG-002-hybrid-retrieval.pdf"],
+      "expected_keywords": ["RRF", "排名", "不是向量相似度"],
+      "should_reject": false
+    },
+    {
+      "id": "SEC-AUTH-010",
+      "category": "authentication",
+      "question": "哪些入口可以匿名访问，/api/auth/me 是否需要登录？",
+      "gold_documents": ["AIKB-SEC-003-auth-permissions.pdf"],
+      "expected_keywords": ["健康检查", "注册", "登录", "/api/auth/me", "必须认证"],
+      "should_reject": false
+    },
+    {
+      "id": "SEC-EXACT-011",
+      "category": "exact_term",
+      "question": "怎样关闭通过 userId 和 department 参数模拟身份的旧兼容模式？",
+      "gold_documents": ["AIKB-SEC-003-auth-permissions.pdf"],
+      "expected_keywords": ["AUTH_ALLOW_LEGACY_IDENTITY_PARAMETERS=false"],
+      "should_reject": false
+    },
+    {
+      "id": "SEC-PERM-012",
+      "category": "authorization",
+      "question": "什么用户能够访问一个知识库？",
+      "gold_documents": ["AIKB-SEC-003-auth-permissions.pdf"],
+      "expected_keywords": ["owner", "当前用户部门", "ForbiddenException"],
+      "should_reject": false
+    },
+    {
+      "id": "SEC-ERROR-013",
+      "category": "error_semantics",
+      "question": "401 和 403 在这个平台中分别表示什么？",
+      "gold_documents": [
+        "AIKB-SEC-003-auth-permissions.pdf",
+        "AIKB-API-005-api-contracts.pdf"
+      ],
+      "expected_keywords": ["没有有效身份", "没有目标资源权限"],
+      "should_reject": false
+    },
+    {
+      "id": "OPS-PORT-014",
+      "category": "troubleshooting",
+      "question": "宿主机 8080 被其他 Java 进程占用时如何启动 Docker 后端？",
+      "gold_documents": ["AIKB-OPS-004-deployment-troubleshooting.pdf"],
+      "expected_keywords": ["lsof", "BACKEND_HOST_PORT=8081", "8081/index.html"],
+      "should_reject": false
+    },
+    {
+      "id": "OPS-BUILD-015",
+      "category": "troubleshooting",
+      "question": "修改源码后为什么 Docker 页面还是旧版本，应该执行什么命令？",
+      "gold_documents": ["AIKB-OPS-004-deployment-troubleshooting.pdf"],
+      "expected_keywords": ["docker compose up -d --build api backend", "强制刷新"],
+      "should_reject": false
+    },
+    {
+      "id": "OPS-MIGRATION-016",
+      "category": "migration",
+      "question": "切换到新 Qdrant Collection 后为什么旧文档列表还在但问答没有结果？",
+      "gold_documents": ["AIKB-OPS-004-deployment-troubleshooting.pdf"],
+      "expected_keywords": ["MySQL", "旧文档元数据", "points_count", "重新上传"],
+      "should_reject": false
+    },
+    {
+      "id": "API-UPLOAD-017",
+      "category": "api_contract",
+      "question": "通过业务后端上传 PDF 的接口路径和 multipart 字段名是什么？",
+      "gold_documents": ["AIKB-API-005-api-contracts.pdf"],
+      "expected_keywords": ["/api/knowledge-bases/{knowledgeBaseId}/documents", "file", "multipart/form-data"],
+      "should_reject": false
+    },
+    {
+      "id": "API-CHAT-018",
+      "category": "api_contract",
+      "question": "旧 /api/rag/ask 停用后，应该通过哪个接口在会话中提问？",
+      "gold_documents": ["AIKB-API-005-api-contracts.pdf"],
+      "expected_keywords": ["/api/chat/sessions/{sessionId}/ask"],
+      "should_reject": false
+    },
+    {
+      "id": "EVAL-ABLATION-019",
+      "category": "evaluation",
+      "question": "检索消融比较哪四种模式，至少记录哪些指标？",
+      "gold_documents": ["AIKB-EVAL-006-quality-gates.pdf"],
+      "expected_keywords": ["vector", "sparse", "hybrid", "hybrid_rerank", "Hit@K", "MRR", "P95"],
+      "should_reject": false
+    },
+    {
+      "id": "EVAL-MULTI-020",
+      "category": "multi_document",
+      "question": "上线演示前，如何同时证明匿名访问被拦截并且 Hybrid 检索结构真实生效？",
+      "gold_documents": [
+        "AIKB-SEC-003-auth-permissions.pdf",
+        "AIKB-EVAL-006-quality-gates.pdf"
+      ],
+      "expected_keywords": ["401", "Collection schema", "points_count", "消融"],
+      "should_reject": false
+    },
+    {
+      "id": "NEG-KAFKA-021",
+      "category": "negative",
+      "question": "平台的 Kafka topic 名称和分区数量是多少？",
+      "gold_documents": [],
+      "expected_keywords": [],
+      "should_reject": true
+    },
+    {
+      "id": "NEG-SSO-022",
+      "category": "negative",
+      "question": "企业 SSO 使用 Keycloak 还是 Azure AD？",
+      "gold_documents": [],
+      "expected_keywords": [],
+      "should_reject": true
+    },
+    {
+      "id": "NEG-SLA-023",
+      "category": "negative",
+      "question": "生产环境承诺的 SLA 和每月可用性是多少？",
+      "gold_documents": [],
+      "expected_keywords": [],
+      "should_reject": true
+    },
+    {
+      "id": "NEG-CLUSTER-024",
+      "category": "negative",
+      "question": "生产 Qdrant 集群部署了多少个节点？",
+      "gold_documents": [],
+      "expected_keywords": [],
+      "should_reject": true
+    },
+    {
+      "id": "NEG-PRICE-025",
+      "category": "negative",
+      "question": "每一万次问答的实际模型费用是多少元？",
+      "gold_documents": [],
+      "expected_keywords": [],
+      "should_reject": true
+    },
+    {
+      "id": "NEG-RPO-026",
+      "category": "negative",
+      "question": "数据库备份的 RPO 和 RTO 分别是多少分钟？",
+      "gold_documents": [],
+      "expected_keywords": [],
+      "should_reject": true
+    }
+  ]
+}
