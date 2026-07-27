@@ -12,6 +12,7 @@ htmlcov/
 .idea/
 *.iml
 target/
+maven-repo/
 springboot-backend/target/
 springboot-backend/maven-repo/
 logs/
