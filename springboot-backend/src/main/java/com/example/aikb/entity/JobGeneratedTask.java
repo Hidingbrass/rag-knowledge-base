@@ -38,6 +38,13 @@ public class JobGeneratedTask {
     @Column(nullable = false, columnDefinition = "TEXT")
     private String resultJson;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private JobTaskStatus status;
+
+    @Column(columnDefinition = "TEXT")
+    private String errorMessage;
+
     @Column(nullable = false)
     private Instant createdAt;
 
@@ -45,12 +52,28 @@ public class JobGeneratedTask {
     }
 
     public JobGeneratedTask(UUID id, String userId, JobGeneratedTaskType taskType, String resumeText, String jobDescription, String resultJson, Instant createdAt) {
+        this(id, userId, taskType, resumeText, jobDescription, resultJson, JobTaskStatus.SUCCESS, null, createdAt);
+    }
+
+    public JobGeneratedTask(
+            UUID id,
+            String userId,
+            JobGeneratedTaskType taskType,
+            String resumeText,
+            String jobDescription,
+            String resultJson,
+            JobTaskStatus status,
+            String errorMessage,
+            Instant createdAt
+    ) {
         this.id = id;
         this.userId = userId;
         this.taskType = taskType;
         this.resumeText = resumeText;
         this.jobDescription = jobDescription;
         this.resultJson = resultJson;
+        this.status = status;
+        this.errorMessage = errorMessage;
         this.createdAt = createdAt;
     }
 
@@ -76,6 +99,14 @@ public class JobGeneratedTask {
 
     public String resultJson() {
         return resultJson;
+    }
+
+    public JobTaskStatus status() {
+        return status;
+    }
+
+    public String errorMessage() {
+        return errorMessage;
     }
 
     public Instant createdAt() {

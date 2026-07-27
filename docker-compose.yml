@@ -13,6 +13,7 @@ services:
       # 宿主机 3306 经常会被本机 MySQL 占用，所以这里用 3307 暴露给 Spring Boot。
       # 容器内部仍然是 MySQL 默认端口 3306。
       - "3307:3306"
+    restart: unless-stopped
     volumes:
       - mysql_data:/var/lib/mysql
     command:
@@ -31,8 +32,26 @@ services:
     ports:
       - "6333:6333"
       - "6334:6334"
+    restart: unless-stopped
     volumes:
       - qdrant_storage:/qdrant/storage
+
+  # Redis 保存短期、高频状态：
+  # AI 接口限流计数、防重复提交锁、后续可扩展为短期缓存。
+  redis:
+    image: redis:7-alpine
+    container_name: rag-redis
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   # FastAPI RAG 服务。
   api:
@@ -48,6 +67,7 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     ports:
       - "8000:8000"
+    restart: unless-stopped
     depends_on:
       - qdrant
     healthcheck:
@@ -69,16 +89,24 @@ services:
       MYSQL_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-rag_knowledge_base}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
       MYSQL_USER: ${MYSQL_USER:-rag_user}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-rag_password}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      UPLOAD_LOCK_ENABLED: ${UPLOAD_LOCK_ENABLED:-true}
+      UPLOAD_LOCK_TTL_SECONDS: ${UPLOAD_LOCK_TTL_SECONDS:-300}
       # Spring Boot 调用 FastAPI 时走 Docker 内部网络。
       FASTAPI_BASE_URL: http://api:8000
     ports:
       - "8080:8080"
+    restart: unless-stopped
     depends_on:
       mysql:
         condition: service_healthy
       api:
         condition: service_healthy
+      redis:
+        condition: service_healthy
 
 volumes:
   mysql_data:
   qdrant_storage:
+  redis_data:

@@ -74,13 +74,44 @@ class FastApiRagClientTests {
         testClient.server.verify();
     }
 
+    @Test
+    void generateJobDeliveryPackageShouldRecordSuccessfulFastApiCall() {
+        TestClient testClient = newTestClient();
+        testClient.server.expect(requestTo("http://fastapi.test/job/delivery-package"))
+                .andExpect(method(POST))
+                .andRespond(withSuccess("""
+                        {
+                          "target_position": "Java 后端开发工程师",
+                          "self_introduction": "我主要做 Java 后端和 AI 应用。",
+                          "project_pitch": "我重点介绍企业知识库 RAG 项目。",
+                          "architecture_talking_points": ["Spring Boot 负责业务层"],
+                          "risk_response": ["Redis 可以结合限流说明"],
+                          "closing_statement": "希望继续做 AI 应用落地。",
+                          "rehearsal_checklist": ["练熟 RAG 链路"]
+                        }
+                        """, MediaType.APPLICATION_JSON));
+
+        var response = testClient.client.generateJobDeliveryPackage("Spring Boot RAG 项目", "需要 Java");
+
+        assertThat(response.targetPosition()).isEqualTo("Java 后端开发工程师");
+        assertThat(response.architectureTalkingPoints()).contains("Spring Boot 负责业务层");
+        verify(testClient.logService).recordFastApiCall(
+                eq("JOB_DELIVERY_PACKAGE"),
+                eq("/job/delivery-package"),
+                eq(true),
+                anyLong(),
+                eq(null)
+        );
+        testClient.server.verify();
+    }
+
     private TestClient newTestClient() {
         RestClient.Builder builder = RestClient.builder().baseUrl("http://fastapi.test");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         AiCallLogService logService = mock(AiCallLogService.class);
         FastApiRagClient client = new FastApiRagClient(
                 builder.build(),
-                new FastApiProperties("http://fastapi.test", 3, 60, 6, 3, 0.75, "hybrid", 6),
+                new FastApiProperties("http://fastapi.test", "", 3, 60, 6, 3, 0.75, "hybrid", 6),
                 logService
         );
         return new TestClient(client, server, logService);

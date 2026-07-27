@@ -24,6 +24,8 @@ from app.schemas.job import (
     JdParseResponse,
     JobAnalyzeRequest,
     JobAnalyzeResponse,
+    JobDeliveryPackageRequest,
+    JobDeliveryPackageResponse,
     ResumeOptimizeRequest,
     ResumeOptimizeResponse,
     ResumeParseRequest,
@@ -544,3 +546,78 @@ def generate_star_interview_answer(request: StarInterviewAnswerRequest) -> StarI
     raw_answer = chat_completion(messages)
 
     return parse_star_interview_answer_response(raw_answer)
+
+
+def build_job_delivery_package_messages(request: JobDeliveryPackageRequest) -> list[dict]:
+    system_prompt = dedent(
+        """
+        你是求职面试成品材料教练。
+        请根据用户提供的简历文本和岗位 JD，生成一份可以直接用于面试练习的求职成品包。
+        你必须只输出 JSON，不要输出 Markdown，不要输出额外解释。
+
+        JSON 字段必须包含：
+        target_position, self_introduction, project_pitch, architecture_talking_points, risk_response, closing_statement, rehearsal_checklist
+
+        字段类型要求：
+        - target_position: 字符串，识别出的目标岗位
+        - self_introduction: 字符串，60 到 90 秒中文自我介绍
+        - project_pitch: 字符串，围绕最匹配岗位的项目生成 2 到 3 分钟项目讲解稿
+        - architecture_talking_points: 字符串数组，讲项目架构时必须覆盖的技术点
+        - risk_response: 字符串数组，针对简历短板或 JD 隐含要求给出应对话术
+        - closing_statement: 字符串，面试结尾总结和表达意愿的话术
+        - rehearsal_checklist: 字符串数组，面试前需要练熟的检查清单
+
+        原则：
+        - 不要编造用户没有做过的经历。
+        - 项目讲解要体现背景、职责、技术方案、难点、结果。
+        - 风险应对要诚实，不要把没有做过的事说成做过。
+        - 语言要适合中文面试口述，不要写成简历条目。
+        - 如果某个字段无法识别，请返回“未识别”或空数组，不要省略字段。
+        """
+    ).strip()
+
+    user_prompt = dedent(
+        f"""
+        简历内容：
+        {request.resume_text.strip()}
+
+        岗位 JD：
+        {request.job_description.strip()}
+        """
+    ).strip()
+
+    return [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt},
+    ]
+
+
+def parse_job_delivery_package_response(raw_answer: str) -> JobDeliveryPackageResponse:
+    json_text = extract_json_object(raw_answer)
+    try:
+        data = json.loads(json_text)
+    except JSONDecodeError as error:
+        raise BadRequestError(
+            "模型返回的求职成品包不是合法 JSON",
+            details={"raw_answer": raw_answer[:500]},
+        ) from error
+    try:
+        return JobDeliveryPackageResponse(**data)
+    except ValidationError as error:
+        raise BadRequestError(
+            "模型返回的求职成品包字段不符合要求",
+            details={"errors": error.errors()},
+        ) from error
+
+
+def generate_job_delivery_package(request: JobDeliveryPackageRequest) -> JobDeliveryPackageResponse:
+    if not request.resume_text.strip():
+        raise BadRequestError("简历内容不能为空")
+
+    if not request.job_description.strip():
+        raise BadRequestError("岗位 JD 不能为空")
+
+    messages = build_job_delivery_package_messages(request)
+    raw_answer = chat_completion(messages)
+
+    return parse_job_delivery_package_response(raw_answer)

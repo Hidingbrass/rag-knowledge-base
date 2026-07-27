@@ -140,7 +140,7 @@ async def unhandled_exception_handler(request: Request, error: Exception) -> JSO
         status_code=500,
         content={
             "error_code": "INTERNAL_SERVER_ERROR",
-            "message": str(error),
+            "message": "服务器内部错误，请查看服务端日志",
         },
     )
 

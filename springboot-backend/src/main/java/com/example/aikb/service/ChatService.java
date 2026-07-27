@@ -75,6 +75,13 @@ public class ChatService {
     private final FastApiRagClient fastApiRagClient;
 
     /**
+     * AI 接口限流服务。
+     *
+     * 放在权限校验之后、FastAPI 调用之前，避免无权限请求浪费限流次数。
+     */
+    private final AiRateLimitService aiRateLimitService;
+
+    /**
      * JSON 工具。
      *
      * 用于把 FastAPI 返回的 sources 列表转换成 sourcesJson 字符串保存到聊天消息表。
@@ -87,6 +94,7 @@ public class ChatService {
             ChatMessageRepository chatMessageRepository,
             KnowledgeDocumentRepository documentRepository,
             FastApiRagClient fastApiRagClient,
+            AiRateLimitService aiRateLimitService,
             ObjectMapper objectMapper
     ) {
         this.knowledgeBaseService = knowledgeBaseService;
@@ -94,6 +102,7 @@ public class ChatService {
         this.chatMessageRepository = chatMessageRepository;
         this.documentRepository = documentRepository;
         this.fastApiRagClient = fastApiRagClient;
+        this.aiRateLimitService = aiRateLimitService;
         this.objectMapper = objectMapper;
     }
 
@@ -220,6 +229,7 @@ public class ChatService {
                                   String documentId) {
         ChatSession session = getRequiredSessionWithAccess(sessionId, userId, department);
         validateDocumentBelongsToSessionKnowledgeBase(documentId, session.knowledgeBaseId());
+        aiRateLimitService.checkAiCallAllowed(userId, "RAG_CHAT");
 
         ChatMessage userMessage = new ChatMessage(
                 UUID.randomUUID(),

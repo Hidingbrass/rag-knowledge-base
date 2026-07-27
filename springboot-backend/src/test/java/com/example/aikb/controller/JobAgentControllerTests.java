@@ -4,7 +4,9 @@ import com.example.aikb.client.FastApiRagClient;
 import com.example.aikb.dto.fastapi.FastApiInterviewPrepResponse;
 import com.example.aikb.dto.fastapi.FastApiInterviewQuestionAnswer;
 import com.example.aikb.dto.fastapi.FastApiJdParseResponse;
+import com.example.aikb.dto.fastapi.FastApiJobAttachmentTextResponse;
 import com.example.aikb.dto.fastapi.FastApiJobAnalyzeResponse;
+import com.example.aikb.dto.fastapi.FastApiJobDeliveryPackageResponse;
 import com.example.aikb.dto.fastapi.FastApiProjectTalkingPoint;
 import com.example.aikb.dto.fastapi.FastApiResumeOptimizeResponse;
 import com.example.aikb.dto.fastapi.FastApiResumeParseResponse;
@@ -16,10 +18,13 @@ import com.example.aikb.entity.JobFavorite;
 import com.example.aikb.entity.JobGeneratedTask;
 import com.example.aikb.entity.JobGeneratedTaskType;
 import com.example.aikb.entity.JobResumeVersion;
+import com.example.aikb.repository.AppUserRepository;
 import com.example.aikb.repository.JobAnalysisTaskRepository;
 import com.example.aikb.repository.JobFavoriteRepository;
 import com.example.aikb.repository.JobGeneratedTaskRepository;
 import com.example.aikb.repository.JobResumeVersionRepository;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,18 +32,22 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -72,12 +81,19 @@ class JobAgentControllerTests {
     @Autowired
     private JobResumeVersionRepository jobResumeVersionRepository;
 
+    @Autowired
+    private AppUserRepository appUserRepository;
+
+    @Autowired
+    private ObjectMapper objectMapper;
+
     @BeforeEach
     void setUp() {
         jobAnalysisTaskRepository.deleteAll();
         jobFavoriteRepository.deleteAll();
         jobGeneratedTaskRepository.deleteAll();
         jobResumeVersionRepository.deleteAll();
+        appUserRepository.deleteAll();
     }
 
     @Test
@@ -127,6 +143,108 @@ class JobAgentControllerTests {
         assertThat(task.jobDescription()).isEqualTo("需要 Java、Spring Boot、FastAPI、RAG");
         assertThat(task.matchScore()).isEqualTo(95);
         assertThat(task.resultJson()).contains("Spring Boot");
+    }
+
+    @Test
+    void analyzeShouldUseJwtUserWhenRequestUserIdIsMissing() throws Exception {
+        String token = registerDemoUser();
+        when(fastApiRagClient.analyzeJob(
+                "Spring Boot FastAPI RAG 项目",
+                "需要 Java、Spring Boot、FastAPI、RAG"
+        )).thenReturn(new FastApiJobAnalyzeResponse(
+                95,
+                List.of("Java", "Spring Boot", "FastAPI", "RAG"),
+                List.of("Redis"),
+                List.of("端到端项目经验完整"),
+                List.of("缓存经验体现较少"),
+                List.of("补充 Redis 使用场景"),
+                List.of("Rerank 解决了什么问题？")
+        ));
+
+        mockMvc.perform(post("/api/job-agent/analyze")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "resumeText": "Spring Boot FastAPI RAG 项目",
+                                  "jobDescription": "需要 Java、Spring Boot、FastAPI、RAG"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.match_score").value(95));
+
+        List<JobAnalysisTask> tasks = jobAnalysisTaskRepository.findByUserIdOrderByCreatedAtDesc("demo-user");
+        assertThat(tasks).hasSize(1);
+        assertThat(tasks.get(0).userId()).isEqualTo("demo-user");
+    }
+
+    @Test
+    void analyzeFromFileShouldExtractJdThenSaveTask() throws Exception {
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "jd.png",
+                "image/png",
+                "fake-image-content".getBytes()
+        );
+        when(fastApiRagClient.extractJdText(any(MultipartFile.class))).thenReturn(new FastApiJobAttachmentTextResponse(
+                "jd.png",
+                "image_ocr",
+                "岗位要求 Java、Spring Boot、Redis。",
+                List.of()
+        ));
+        when(fastApiRagClient.analyzeJob(
+                "我做过 Spring Boot RAG 项目",
+                "岗位要求 Java、Spring Boot、Redis。"
+        )).thenReturn(new FastApiJobAnalyzeResponse(
+                92,
+                List.of("Java", "Spring Boot"),
+                List.of("Redis"),
+                List.of("项目经验匹配"),
+                List.of("Redis 体现不足"),
+                List.of("补充 Redis 限流经验"),
+                List.of("Redis 限流怎么做？")
+        ));
+
+        mockMvc.perform(multipart("/api/job-agent/analyze-from-file")
+                        .file(file)
+                        .param("userId", "demo-user")
+                        .param("resumeText", "我做过 Spring Boot RAG 项目"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.match_score").value(92))
+                .andExpect(jsonPath("$.data.missing_skills[0]").value("Redis"));
+
+        verify(fastApiRagClient).extractJdText(any(MultipartFile.class));
+        verify(fastApiRagClient).analyzeJob(
+                "我做过 Spring Boot RAG 项目",
+                "岗位要求 Java、Spring Boot、Redis。"
+        );
+
+        List<JobAnalysisTask> tasks = jobAnalysisTaskRepository.findByUserIdOrderByCreatedAtDesc("demo-user");
+        assertThat(tasks).hasSize(1);
+        assertThat(tasks.get(0).jobDescription()).isEqualTo("岗位要求 Java、Spring Boot、Redis。");
+        assertThat(tasks.get(0).matchScore()).isEqualTo(92);
+    }
+
+    private String registerDemoUser() throws Exception {
+        String response = mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "username": "demo-user",
+                                  "password": "secret123",
+                                  "displayName": "Demo User",
+                                  "department": "研发部"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        JsonNode root = objectMapper.readTree(response);
+        return root.path("data").path("accessToken").asText();
     }
 
     @Test
@@ -193,7 +311,7 @@ class JobAgentControllerTests {
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.success").value(false))
-                .andExpect(jsonPath("$.message").value("userId: 用户 ID 不能为空"));
+                .andExpect(jsonPath("$.message").value("用户 ID 不能为空"));
     }
 
     @Test
@@ -359,7 +477,7 @@ class JobAgentControllerTests {
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.success").value(false))
-                .andExpect(jsonPath("$.message").value("userId: 用户 ID 不能为空"));
+                .andExpect(jsonPath("$.message").value("用户 ID 不能为空"));
     }
 
     @Test
@@ -897,6 +1015,50 @@ class JobAgentControllerTests {
     }
 
     @Test
+    void generateJobDeliveryPackageShouldReturnResponseAndSaveGeneratedTask() throws Exception {
+        when(fastApiRagClient.generateJobDeliveryPackage(
+                "Spring Boot FastAPI RAG 项目",
+                "需要 Java、Spring Boot、RAG 和大模型应用"
+        )).thenReturn(new FastApiJobDeliveryPackageResponse(
+                "Java 后端开发工程师",
+                "面试官您好，我主要做 Java 后端和 AI 应用落地。",
+                "我重点介绍企业知识库 RAG 项目，它完成了文档入库、检索、重排和问答。",
+                List.of("Spring Boot 负责业务权限和持久化", "FastAPI 负责 AI 服务编排"),
+                List.of("高并发经验可以结合 Redis 限流和上传防重复提交说明"),
+                "我希望继续把后端工程能力和 AI 应用落地结合起来。",
+                List.of("练熟 RAG 全链路", "准备 Redis 限流细节")
+        ));
+
+        mockMvc.perform(post("/api/job-agent/delivery-package")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "userId": "demo-user",
+                                  "resumeText": "Spring Boot FastAPI RAG 项目",
+                                  "jobDescription": "需要 Java、Spring Boot、RAG 和大模型应用"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.target_position").value("Java 后端开发工程师"))
+                .andExpect(jsonPath("$.data.project_pitch").value("我重点介绍企业知识库 RAG 项目，它完成了文档入库、检索、重排和问答。"))
+                .andExpect(jsonPath("$.data.architecture_talking_points[0]").value("Spring Boot 负责业务权限和持久化"))
+                .andExpect(jsonPath("$.data.rehearsal_checklist[0]").value("练熟 RAG 全链路"));
+
+        verify(fastApiRagClient).generateJobDeliveryPackage(
+                "Spring Boot FastAPI RAG 项目",
+                "需要 Java、Spring Boot、RAG 和大模型应用"
+        );
+
+        List<JobGeneratedTask> tasks = jobGeneratedTaskRepository.findByUserIdAndTaskTypeOrderByCreatedAtDesc(
+                "demo-user",
+                JobGeneratedTaskType.JOB_DELIVERY_PACKAGE
+        );
+        assertThat(tasks).hasSize(1);
+        assertThat(tasks.get(0).resultJson()).contains("Redis 限流");
+    }
+
+    @Test
     void listGeneratedTasksShouldFilterByUserAndType() throws Exception {
         jobGeneratedTaskRepository.save(new JobGeneratedTask(
                 UUID.randomUUID(),
@@ -1018,7 +1180,7 @@ class JobAgentControllerTests {
         mockMvc.perform(get("/api/job-agent/tasks"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.success").value(false))
-                .andExpect(jsonPath("$.message").value("请求参数缺失: userId"));
+                .andExpect(jsonPath("$.message").value("用户 ID 不能为空"));
     }
 
     @Test

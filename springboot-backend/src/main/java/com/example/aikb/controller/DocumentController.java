@@ -2,7 +2,9 @@ package com.example.aikb.controller;
 
 import com.example.aikb.common.ApiResponse;
 import com.example.aikb.dto.document.DocumentResponse;
+import com.example.aikb.security.AuthenticatedUser;
 import com.example.aikb.service.DocumentService;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -14,6 +16,9 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.UUID;
+
+import static com.example.aikb.common.CurrentUserIdentity.departmentOrRequestParam;
+import static com.example.aikb.common.CurrentUserIdentity.userIdOrRequestParam;
 
 /**
  * 文档管理接口。
@@ -43,13 +48,19 @@ public class DocumentController {
      */
     @PostMapping
     public ApiResponse<DocumentResponse> indexDocument(
+            @AuthenticationPrincipal AuthenticatedUser currentUser,
             @PathVariable UUID knowledgeBaseId,
-            @RequestParam String userId,
-            @RequestParam String department,
+            @RequestParam(required = false) String userId,
+            @RequestParam(required = false) String department,
             @RequestPart("file") MultipartFile file
     ) {
         return ApiResponse.ok(DocumentResponse.from(
-                documentService.indexDocument(knowledgeBaseId, userId, department, file)
+                documentService.indexDocument(
+                        knowledgeBaseId,
+                        userIdOrRequestParam(currentUser, userId),
+                        departmentOrRequestParam(currentUser, department),
+                        file
+                )
         ));
     }
 
@@ -61,12 +72,17 @@ public class DocumentController {
      */
     @GetMapping
     public ApiResponse<List<DocumentResponse>> listDocuments(
+            @AuthenticationPrincipal AuthenticatedUser currentUser,
             @PathVariable UUID knowledgeBaseId,
-            @RequestParam String userId,
-            @RequestParam String department
+            @RequestParam(required = false) String userId,
+            @RequestParam(required = false) String department
     ) {
         List<DocumentResponse> responses = documentService
-                .listByKnowledgeBase(knowledgeBaseId, userId, department)
+                .listByKnowledgeBase(
+                        knowledgeBaseId,
+                        userIdOrRequestParam(currentUser, userId),
+                        departmentOrRequestParam(currentUser, department)
+                )
                 .stream()
                 .map(DocumentResponse::from)
                 .toList();

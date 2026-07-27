@@ -72,6 +72,33 @@ flowchart LR
 - Vue3 企业知识库工作台
 - 保留静态 HTML/CSS/JavaScript 联调页
 
+## 一键启动完整系统
+
+首次运行前复制环境变量模板，并填写真实的通义千问 API Key：
+
+```bash
+cp .env.example .env
+```
+
+然后启动 MySQL、Qdrant、Redis、FastAPI 和 Spring Boot：
+
+```bash
+docker compose up -d --build
+```
+
+启动后访问：
+
+- Spring Boot 工作台：http://127.0.0.1:8080/index.html
+- Spring Boot 健康检查：http://127.0.0.1:8080/api/health
+- FastAPI 文档：http://127.0.0.1:8000/docs
+- Qdrant 控制台：http://127.0.0.1:6333/dashboard
+
+如果只想启动基础中间件用于本地开发：
+
+```bash
+docker compose up -d mysql qdrant redis
+```
+
 ## 核心功能
 
 - PDF 文档解析

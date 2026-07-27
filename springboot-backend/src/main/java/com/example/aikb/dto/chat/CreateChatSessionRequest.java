@@ -1,7 +1,7 @@
 package com.example.aikb.dto.chat;
 
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.NotBlank;
 
 import java.util.UUID;
 
@@ -17,10 +17,8 @@ public record CreateChatSessionRequest(
         @NotNull(message = "knowledgeBaseId 不能为空")
         UUID knowledgeBaseId,
 
-        @NotBlank(message = "用户 ID 不能为空")
         String userId,
 
-        @NotBlank(message = "部门不能为空")
         String department,
 
         @NotBlank(message = "会话标题不能为空")

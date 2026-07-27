@@ -34,15 +34,21 @@ public class DocumentService {
     private final KnowledgeBaseService knowledgeBaseService;
     private final KnowledgeDocumentRepository documentRepository;
     private final FastApiRagClient fastApiRagClient;
+    private final AiRateLimitService aiRateLimitService;
+    private final UploadDuplicateLockService uploadDuplicateLockService;
 
     public DocumentService(
             KnowledgeBaseService knowledgeBaseService,
             KnowledgeDocumentRepository documentRepository,
-            FastApiRagClient fastApiRagClient
+            FastApiRagClient fastApiRagClient,
+            AiRateLimitService aiRateLimitService,
+            UploadDuplicateLockService uploadDuplicateLockService
     ) {
         this.knowledgeBaseService = knowledgeBaseService;
         this.documentRepository = documentRepository;
         this.fastApiRagClient = fastApiRagClient;
+        this.aiRateLimitService = aiRateLimitService;
+        this.uploadDuplicateLockService = uploadDuplicateLockService;
     }
 
     /**
@@ -65,6 +71,13 @@ public class DocumentService {
         if (duplicatedDocument != null) {
             return new DocumentIndexResult(duplicatedDocument, true);
         }
+
+        boolean lockAcquired = uploadDuplicateLockService.tryLockDocumentUpload(userId, knowledgeBaseId, fileHash);
+        if (!lockAcquired) {
+            throw new BusinessException("该文档正在处理中，请稍后刷新文档列表");
+        }
+
+        aiRateLimitService.checkAiCallAllowed(userId, "DOCUMENT_INDEX");
 
         Instant now = Instant.now();
         KnowledgeDocument processingDocument = new KnowledgeDocument(
@@ -112,6 +125,8 @@ public class DocumentService {
             );
             documentRepository.save(failedDocument);
             throw exception;
+        } finally {
+            uploadDuplicateLockService.unlockDocumentUpload(userId, knowledgeBaseId, fileHash);
         }
     }
 

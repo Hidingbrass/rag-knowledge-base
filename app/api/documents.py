@@ -15,12 +15,16 @@ HTTP 层只负责：
 
 from fastapi import APIRouter, File, UploadFile
 
+from app.core.config import settings
 from app.core.exceptions import BadRequestError
 from app.services.document_service import index_pdf_document, preview_pdf_document
 from app.services.qdrant_service import delete_document_points, list_indexed_documents
 
 
 router = APIRouter()
+
+# 读取时多读 1 字节，用来判断是否超限，同时避免把超大文件完整读入内存。
+_MAX_READ_SIZE = settings.max_upload_size_mb * 1024 * 1024 + 1
 
 
 def ensure_pdf_file(file: UploadFile):
@@ -36,11 +40,26 @@ def ensure_pdf_file(file: UploadFile):
         raise BadRequestError("目前只支持 PDF 文件")
 
 
+def ensure_file_size(content: bytes):
+    """校验上传文件是否超过大小限制。
+
+    参数：
+    - content：文件字节内容。
+
+    抛出：
+    - BadRequestError：当文件超过最大上传大小时。
+    """
+    max_size = settings.max_upload_size_mb
+    if len(content) > max_size * 1024 * 1024:
+        raise BadRequestError(f"文件大小不能超过 {max_size}MB")
+
+
 @router.post("/documents/preview")
 async def preview_document(file: UploadFile = File(...)):
     """预览 PDF 解析和切分结果，但不写入 Qdrant。"""
     ensure_pdf_file(file)
-    content = await file.read()
+    content = await file.read(_MAX_READ_SIZE)
+    ensure_file_size(content)
 
     return preview_pdf_document(file.filename, content)
 
@@ -49,7 +68,8 @@ async def preview_document(file: UploadFile = File(...)):
 async def index_document(file: UploadFile = File(...)):
     """上传 PDF、解析切分、向量化并写入 Qdrant。"""
     ensure_pdf_file(file)
-    content = await file.read()
+    content = await file.read(_MAX_READ_SIZE)
+    ensure_file_size(content)
 
     return index_pdf_document(file.filename, content)
 

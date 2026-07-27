@@ -16,6 +16,7 @@ from app.schemas.job import (
     InterviewPrepResponse,
     JdParseResponse,
     JobAnalyzeResponse,
+    JobAttachmentTextResponse,
     ResumeOptimizeResponse,
     ResumeParseResponse,
 )
@@ -45,10 +46,14 @@ def test_original_routes_are_registered():
         "/rag/chat",
         "/rag/chat/rerank",
         "/job/analyze",
+        "/job/analyze-from-file",
         "/job/resume/parse",
         "/job/jd/parse",
+        "/job/jd/extract-text",
         "/job/resume/optimize",
         "/job/interview/prepare",
+        "/job/interview/star-answer",
+        "/job/delivery-package",
     }
 
     assert expected_paths.issubset(route_paths)
@@ -173,6 +178,97 @@ def test_jd_parse_route_calls_service(monkeypatch):
     assert response.json()["job_title"] == "Java 后端开发工程师"
     assert response.json()["required_skills"] == ["Java", "Spring Boot", "MySQL"]
     assert response.json()["preferred_skills"] == ["RAG", "向量数据库"]
+
+
+def test_jd_extract_text_route_calls_service(monkeypatch):
+    """岗位附件文字提取路由应该把上传文件交给 service。"""
+    captured = {}
+
+    def fake_extract_job_text_from_attachment(filename, content_type, content):
+        captured["filename"] = filename
+        captured["content_type"] = content_type
+        captured["content"] = content
+        return JobAttachmentTextResponse(
+            filename=filename,
+            source_type="image_ocr",
+            text="岗位要求：Java、Spring Boot、Redis。",
+            warnings=[],
+        )
+
+    monkeypatch.setattr(
+        job_api,
+        "extract_job_text_from_attachment",
+        fake_extract_job_text_from_attachment,
+    )
+
+    response = client.post(
+        "/job/jd/extract-text",
+        files={
+            "file": ("jd.png", b"fake-image-content", "image/png"),
+        },
+    )
+
+    assert response.status_code == 200
+    assert captured == {
+        "filename": "jd.png",
+        "content_type": "image/png",
+        "content": b"fake-image-content",
+    }
+    assert response.json() == {
+        "filename": "jd.png",
+        "source_type": "image_ocr",
+        "text": "岗位要求：Java、Spring Boot、Redis。",
+        "warnings": [],
+    }
+
+
+def test_analyze_from_file_route_extracts_jd_then_calls_analyze(monkeypatch):
+    """上传岗位截图分析时，应先识别 JD，再复用原有匹配分析逻辑。"""
+    captured = {}
+
+    def fake_extract_job_text_from_attachment(filename, content_type, content):
+        captured["file"] = (filename, content_type, content)
+        return JobAttachmentTextResponse(
+            filename=filename,
+            source_type="image_ocr",
+            text="岗位要求：Java、Spring Boot、Redis。",
+            warnings=[],
+        )
+
+    def fake_analyze_job_match(request):
+        captured["resume_text"] = request.resume_text
+        captured["job_description"] = request.job_description
+        return JobAnalyzeResponse(
+            match_score=92,
+            matched_skills=["Java", "Spring Boot"],
+            missing_skills=["Redis"],
+            strengths=["项目经验匹配"],
+            risks=["缓存经验体现不足"],
+            suggestions=["补充 Redis 限流经验"],
+            interview_questions=["Redis 限流怎么做？"],
+        )
+
+    monkeypatch.setattr(
+        job_api,
+        "extract_job_text_from_attachment",
+        fake_extract_job_text_from_attachment,
+    )
+    monkeypatch.setattr(job_api, "analyze_job_match", fake_analyze_job_match)
+
+    response = client.post(
+        "/job/analyze-from-file",
+        data={"resume_text": "我做过 Spring Boot RAG 项目。"},
+        files={
+            "file": ("jd.png", b"fake-image-content", "image/png"),
+        },
+    )
+
+    assert response.status_code == 200
+    assert captured["file"] == ("jd.png", "image/png", b"fake-image-content")
+    assert captured["resume_text"] == "我做过 Spring Boot RAG 项目。"
+    assert captured["job_description"] == "岗位要求：Java、Spring Boot、Redis。"
+    assert response.json()["match_score"] == 92
+    assert response.json()["missing_skills"] == ["Redis"]
 
 
 def test_resume_optimize_route_calls_service(monkeypatch):

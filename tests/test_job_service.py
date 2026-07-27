@@ -5,6 +5,7 @@ from app.schemas.job import (
     InterviewPrepRequest,
     JdParseRequest,
     JobAnalyzeRequest,
+    JobDeliveryPackageRequest,
     ResumeOptimizeRequest,
     ResumeParseRequest,
     StarInterviewAnswerRequest,
@@ -86,6 +87,83 @@ def test_analyze_job_match_rejects_empty_resume():
             JobAnalyzeRequest(
                 resume_text="   ",
                 job_description="需要 Java 和 Spring Boot",
+            )
+        )
+
+
+def test_build_job_delivery_package_messages_contains_resume_and_jd():
+    request = JobDeliveryPackageRequest(
+        resume_text="我做过 Spring Boot + FastAPI 企业知识库 RAG 项目。",
+        job_description="岗位要求熟悉 Java、Spring Boot、RAG 和大模型应用。",
+    )
+
+    messages = job_service.build_job_delivery_package_messages(request)
+
+    assert messages[0]["role"] == "system"
+    assert "求职成品包" in messages[0]["content"]
+    assert "project_pitch" in messages[0]["content"]
+    assert messages[1]["role"] == "user"
+    assert "企业知识库 RAG 项目" in messages[1]["content"]
+    assert "大模型应用" in messages[1]["content"]
+
+
+def test_parse_job_delivery_package_response_accepts_json_code_block():
+    raw_answer = """
+    ```json
+    {
+      "target_position": "Java 后端开发工程师",
+      "self_introduction": "面试官您好，我主要做 Java 后端和 AI 应用。",
+      "project_pitch": "我重点介绍企业知识库 RAG 项目。",
+      "architecture_talking_points": ["Spring Boot 负责业务层", "FastAPI 负责 AI 服务"],
+      "risk_response": ["Redis 经验可以结合限流和防重复提交说明"],
+      "closing_statement": "我希望把后端工程能力和 AI 应用落地结合起来。",
+      "rehearsal_checklist": ["练熟 RAG 全链路", "准备权限控制细节"]
+    }
+    ```
+    """
+
+    result = job_service.parse_job_delivery_package_response(raw_answer)
+
+    assert result.target_position == "Java 后端开发工程师"
+    assert "RAG 项目" in result.project_pitch
+    assert result.architecture_talking_points == ["Spring Boot 负责业务层", "FastAPI 负责 AI 服务"]
+
+
+def test_generate_job_delivery_package_calls_chat_completion(monkeypatch):
+    def fake_chat_completion(messages):
+        assert messages[0]["role"] == "system"
+        assert messages[1]["role"] == "user"
+        return """
+        {
+          "target_position": "AI 应用开发工程师",
+          "self_introduction": "我有 RAG 项目经验。",
+          "project_pitch": "项目实现了文档入库、向量检索和问答。",
+          "architecture_talking_points": ["MySQL 保存业务数据", "Qdrant 保存向量"],
+          "risk_response": ["高并发经验可以结合 Redis 限流说明"],
+          "closing_statement": "我希望继续做 AI 应用落地。",
+          "rehearsal_checklist": ["讲清楚 Rerank", "讲清楚权限边界"]
+        }
+        """
+
+    monkeypatch.setattr(job_service, "chat_completion", fake_chat_completion)
+
+    result = job_service.generate_job_delivery_package(
+        JobDeliveryPackageRequest(
+            resume_text="RAG 项目",
+            job_description="AI 应用岗位",
+        )
+    )
+
+    assert result.target_position == "AI 应用开发工程师"
+    assert "Redis 限流" in result.risk_response[0]
+
+
+def test_generate_job_delivery_package_rejects_empty_jd():
+    with pytest.raises(BadRequestError):
+        job_service.generate_job_delivery_package(
+            JobDeliveryPackageRequest(
+                resume_text="RAG 项目",
+                job_description="   ",
             )
         )
 

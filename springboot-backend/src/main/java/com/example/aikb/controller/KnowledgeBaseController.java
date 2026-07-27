@@ -3,8 +3,10 @@ package com.example.aikb.controller;
 import com.example.aikb.common.ApiResponse;
 import com.example.aikb.dto.knowledgebase.CreateKnowledgeBaseRequest;
 import com.example.aikb.dto.knowledgebase.KnowledgeBaseResponse;
+import com.example.aikb.security.AuthenticatedUser;
 import com.example.aikb.service.KnowledgeBaseService;
 import jakarta.validation.Valid;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -35,9 +37,17 @@ public class KnowledgeBaseController {
 
     @PostMapping
     public ApiResponse<KnowledgeBaseResponse> create(
+            @AuthenticationPrincipal AuthenticatedUser currentUser,
             @Valid @RequestBody CreateKnowledgeBaseRequest request
     ) {
-        return ApiResponse.ok(KnowledgeBaseResponse.from(knowledgeBaseService.create(request)));
+        String ownerId = currentUser != null ? currentUser.username() : request.ownerId();
+        String department = currentUser != null ? currentUser.department() : request.department();
+        return ApiResponse.ok(KnowledgeBaseResponse.from(knowledgeBaseService.create(new CreateKnowledgeBaseRequest(
+                request.name(),
+                request.description(),
+                ownerId,
+                department
+        ))));
     }
 
     @GetMapping

@@ -8,7 +8,6 @@ import jakarta.validation.constraints.NotBlank;
  * 这个 DTO 面向前端，所以字段使用 Java 常见的 camelCase。
  */
 public record JobAnalyzeRequest(
-        @NotBlank(message = "用户 ID 不能为空")
         String userId,
 
         @NotBlank(message = "简历内容不能为空")

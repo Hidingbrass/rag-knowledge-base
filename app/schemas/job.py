@@ -54,6 +54,13 @@ class JdParseResponse(BaseModel):
     risks: list[str]
 
 
+class JobAttachmentTextResponse(BaseModel):
+    filename: str
+    source_type: str
+    text: str
+    warnings: list[str] = []
+
+
 class ResumeOptimizeRequest(BaseModel):
     resume_text: str
     job_description: str
@@ -120,3 +127,18 @@ class StarInterviewAnswerResponse(BaseModel):
     answer: str
     highlights: list[str]
     follow_up_questions: list[str]
+
+
+class JobDeliveryPackageRequest(BaseModel):
+    resume_text: str
+    job_description: str
+
+
+class JobDeliveryPackageResponse(BaseModel):
+    target_position: str
+    self_introduction: str
+    project_pitch: str
+    architecture_talking_points: list[str]
+    risk_response: list[str]
+    closing_statement: str
+    rehearsal_checklist: list[str]

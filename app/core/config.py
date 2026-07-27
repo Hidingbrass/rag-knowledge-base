@@ -105,6 +105,10 @@ class Settings:
     default_rerank_min_score: float
     default_fallback_min_score: float
     slow_rerank_threshold: float
+    max_upload_size_mb: int
+    fastapi_api_key: str
+    vision_model: str
+    job_ocr_pdf_max_pages: int
 
 
 settings = Settings(
@@ -132,4 +136,8 @@ settings = Settings(
     default_rerank_min_score=get_float_env("RAG_DEFAULT_RERANK_MIN_SCORE", 0.75),
     default_fallback_min_score=get_float_env("RAG_DEFAULT_FALLBACK_MIN_SCORE", 0.55),
     slow_rerank_threshold=get_float_env("RAG_SLOW_RERANK_THRESHOLD", 3.0),
+    max_upload_size_mb=get_int_env("MAX_UPLOAD_SIZE_MB", 10),
+    fastapi_api_key=os.getenv("FASTAPI_API_KEY", ""),
+    vision_model=os.getenv("QWEN_VISION_MODEL", "qwen-vl-plus"),
+    job_ocr_pdf_max_pages=get_int_env("JOB_OCR_PDF_MAX_PAGES", 3),
 )

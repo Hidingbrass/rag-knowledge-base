@@ -18,3 +18,23 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+  data:
+    redis:
+      repositories:
+        enabled: false
+
+ai:
+  rate-limit:
+    enabled: false
+    per-minute: 5
+    per-day: 100
+
+upload:
+  lock:
+    enabled: false
+    ttl-seconds: 300
+
+auth:
+  jwt:
+    secret: test-only-change-me-to-a-long-random-secret
+    expires-in-seconds: 86400

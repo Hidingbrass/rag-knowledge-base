@@ -4,9 +4,12 @@
 - create_embedding：单条文本向量化。
 - create_embeddings：批量文本向量化。
 - chat_completion：调用 qwen-plus 生成回答。
+- chat_completion_with_images：调用视觉模型识别截图或扫描 PDF。
 
 把模型调用放在 service 层，可以避免 main.py 直接依赖模型客户端细节。
 """
+
+import base64
 
 from openai import OpenAI
 
@@ -83,6 +86,39 @@ def chat_completion(messages: list[dict]) -> str:
     completion = client.chat.completions.create(
         model=settings.chat_model,
         messages=messages,
+    )
+
+    return completion.choices[0].message.content
+
+
+def chat_completion_with_images(prompt: str, images: list[tuple[bytes, str]]) -> str:
+    """调用视觉模型，从图片中提取或理解文本。
+
+    参数：
+    - prompt：告诉视觉模型要完成什么任务。
+    - images：图片字节和 MIME 类型列表，例如 [(content, "image/png")]。
+
+    返回：
+    - 模型生成的文本。
+    """
+    content = [{"type": "text", "text": prompt}]
+    for image_content, mime_type in images:
+        encoded_image = base64.b64encode(image_content).decode("ascii")
+        content.append({
+            "type": "image_url",
+            "image_url": {
+                "url": f"data:{mime_type};base64,{encoded_image}",
+            },
+        })
+
+    completion = client.chat.completions.create(
+        model=settings.vision_model,
+        messages=[
+            {
+                "role": "user",
+                "content": content,
+            }
+        ],
     )
 
     return completion.choices[0].message.content

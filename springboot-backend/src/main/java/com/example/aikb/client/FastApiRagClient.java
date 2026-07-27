@@ -6,8 +6,11 @@ import com.example.aikb.dto.fastapi.FastApiInterviewPrepRequest;
 import com.example.aikb.dto.fastapi.FastApiInterviewPrepResponse;
 import com.example.aikb.dto.fastapi.FastApiJdParseRequest;
 import com.example.aikb.dto.fastapi.FastApiJdParseResponse;
+import com.example.aikb.dto.fastapi.FastApiJobAttachmentTextResponse;
 import com.example.aikb.dto.fastapi.FastApiJobAnalyzeRequest;
 import com.example.aikb.dto.fastapi.FastApiJobAnalyzeResponse;
+import com.example.aikb.dto.fastapi.FastApiJobDeliveryPackageRequest;
+import com.example.aikb.dto.fastapi.FastApiJobDeliveryPackageResponse;
 import com.example.aikb.dto.fastapi.FastApiRagResponse;
 import com.example.aikb.dto.fastapi.FastApiRerankChatRequest;
 import com.example.aikb.dto.fastapi.FastApiResumeOptimizeRequest;
@@ -103,18 +106,8 @@ public class FastApiRagClient {
      * 同时要保留原始文件名，否则 FastAPI 侧拿到的 filename 可能为空。
      */
     public FastApiDocumentIndexResponse indexDocument(MultipartFile file) {
-        String filename = file.getOriginalFilename();
-
         try {
-            ByteArrayResource fileResource = new ByteArrayResource(file.getBytes()) {
-                @Override
-                public String getFilename() {
-                    return filename;
-                }
-            };
-
-            MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
-            body.add("file", fileResource);
+            MultiValueMap<String, Object> body = multipartFileBody(file);
 
             return callFastApi("DOCUMENT_INDEX", "/documents/index", () ->
                     fastApiRestClient.post()
@@ -128,6 +121,39 @@ public class FastApiRagClient {
         } catch (IOException exception) {
             throw new BusinessException("读取上传文件失败", exception);
         }
+    }
+
+    public FastApiJobAttachmentTextResponse extractJdText(MultipartFile file) {
+        try {
+            MultiValueMap<String, Object> body = multipartFileBody(file);
+
+            return callFastApi("JD_ATTACHMENT_EXTRACT", "/job/jd/extract-text", () ->
+                    fastApiRestClient.post()
+                            .uri("/job/jd/extract-text")
+                            .contentType(MediaType.MULTIPART_FORM_DATA)
+                            .body(body)
+                            .retrieve()
+                            .body(FastApiJobAttachmentTextResponse.class),
+                    "调用 FastAPI 岗位附件识别服务失败"
+            );
+        } catch (IOException exception) {
+            throw new BusinessException("读取上传文件失败", exception);
+        }
+    }
+
+    private MultiValueMap<String, Object> multipartFileBody(MultipartFile file) throws IOException {
+        String filename = file.getOriginalFilename();
+
+        ByteArrayResource fileResource = new ByteArrayResource(file.getBytes()) {
+            @Override
+            public String getFilename() {
+                return filename;
+            }
+        };
+
+        MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
+        body.add("file", fileResource);
+        return body;
     }
 
     public FastApiJobAnalyzeResponse analyzeJob(String resumeText, String jobDescription) {
@@ -217,6 +243,22 @@ public class FastApiRagClient {
                     .retrieve()
                     .body(FastApiStarInterviewAnswerResponse.class),
                 "调用 FastAPI STAR 面试答案服务失败"
+        );
+    }
+
+    public FastApiJobDeliveryPackageResponse generateJobDeliveryPackage(String resumeText, String jobDescription) {
+        FastApiJobDeliveryPackageRequest request = new FastApiJobDeliveryPackageRequest(
+                resumeText,
+                jobDescription
+        );
+
+        return callFastApi("JOB_DELIVERY_PACKAGE", "/job/delivery-package", () ->
+                fastApiRestClient.post()
+                        .uri("/job/delivery-package")
+                        .body(request)
+                        .retrieve()
+                        .body(FastApiJobDeliveryPackageResponse.class),
+                "调用 FastAPI 求职成品包服务失败"
         );
     }
 

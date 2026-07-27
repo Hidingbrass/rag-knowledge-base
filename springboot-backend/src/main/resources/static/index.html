@@ -807,6 +807,65 @@
             margin-bottom: 16px;
         }
 
+        .auth-profile {
+            display: grid;
+            grid-template-columns: 42px minmax(0, 1fr);
+            gap: 10px;
+            align-items: center;
+            padding: 10px;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: #fff;
+            margin-bottom: 12px;
+        }
+
+        .auth-avatar {
+            width: 42px;
+            height: 42px;
+            border-radius: 8px;
+            display: grid;
+            place-items: center;
+            background: #e0f2fe;
+            color: #075985;
+            font-weight: 800;
+        }
+
+        .auth-name {
+            min-width: 0;
+            font-weight: 800;
+            color: var(--text);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .auth-meta {
+            margin-top: 3px;
+            color: var(--muted);
+            font-size: 12px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .auth-switch {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .muted {
+            margin-top: 6px;
+            color: var(--muted);
+            font-size: 12px;
+            line-height: 1.45;
+        }
+
+        .auth-switch button {
+            justify-content: center;
+        }
+
         .status {
             padding: 12px;
             border-radius: 8px;
@@ -1308,6 +1367,13 @@
                             <textarea class="textarea" v-model="jobForm.jobDescription"></textarea>
                         </div>
                         <div class="field">
+                            <label>JD 截图 / PDF</label>
+                            <input class="input" type="file" accept="application/pdf,image/png,image/jpeg,image/webp" @change="onJobAttachmentChange">
+                            <div class="muted" v-if="jobAttachmentFile">
+                                已选择：{{ jobAttachmentFile.name }}
+                            </div>
+                        </div>
+                        <div class="field">
                             <label>STAR 面试问题</label>
                             <input class="input" v-model="jobForm.interviewQuestion">
                         </div>
@@ -1339,7 +1405,9 @@
                             <button class="btn ghost" @click="optimizeResume">优化简历</button>
                             <button class="btn ghost" @click="prepareInterview">面试准备</button>
                             <button class="btn ghost" @click="generateStarInterviewAnswer">生成 STAR 答案</button>
+                            <button class="btn ghost" @click="generateJobDeliveryPackage">生成求职成品包</button>
                             <button class="btn" @click="analyzeJob">分析并保存</button>
+                            <button class="btn" @click="analyzeJobFromAttachment">识别附件并分析</button>
                             <button class="btn ghost" @click="loadResumeVersions">刷新简历版本</button>
                             <button class="btn ghost" @click="loadJobTasks">刷新历史</button>
                             <button class="btn ghost" @click="loadJobGeneratedTasks">刷新生成历史</button>
@@ -1347,6 +1415,7 @@
                             <button class="btn ghost" @click="exportResumeOptimizeReport">导出优化报告</button>
                             <button class="btn ghost" @click="exportInterviewPrepReport">导出面试包</button>
                             <button class="btn ghost" @click="exportStarInterviewAnswerReport">导出 STAR 答案</button>
+                            <button class="btn ghost" @click="exportJobDeliveryPackageReport">导出成品包</button>
                         </div>
                     </div>
                 </div>
@@ -1822,6 +1891,63 @@
 
             <div class="card" style="margin-top: 16px;">
                 <div class="card-header">
+                    <h3 class="card-title">求职成品包</h3>
+                    <span class="badge green" v-if="normalizedJobDeliveryPackageResult">{{ normalizedJobDeliveryPackageResult.targetPosition }}</span>
+                </div>
+                <div class="card-body">
+                    <div v-if="normalizedJobDeliveryPackageResult">
+                        <div class="job-result-grid">
+                            <div class="job-section">
+                                <h4>自我介绍</h4>
+                                <p>{{ normalizedJobDeliveryPackageResult.selfIntroduction }}</p>
+                            </div>
+                            <div class="job-section">
+                                <h4>项目讲解稿</h4>
+                                <p>{{ normalizedJobDeliveryPackageResult.projectPitch }}</p>
+                            </div>
+                            <div class="job-section">
+                                <h4>架构讲点</h4>
+                                <ul>
+                                    <li v-for="(item, index) in normalizedJobDeliveryPackageResult.architectureTalkingPoints" :key="`delivery-arch-${index}-${item}`">{{ item }}</li>
+                                    <li v-if="normalizedJobDeliveryPackageResult.architectureTalkingPoints.length === 0">暂无</li>
+                                </ul>
+                            </div>
+                            <div class="job-section">
+                                <h4>风险应对</h4>
+                                <ul>
+                                    <li v-for="(item, index) in normalizedJobDeliveryPackageResult.riskResponse" :key="`delivery-risk-${index}-${item}`">{{ item }}</li>
+                                    <li v-if="normalizedJobDeliveryPackageResult.riskResponse.length === 0">暂无</li>
+                                </ul>
+                            </div>
+                            <div class="job-section">
+                                <h4>收尾话术</h4>
+                                <p>{{ normalizedJobDeliveryPackageResult.closingStatement }}</p>
+                            </div>
+                            <div class="job-section">
+                                <h4>练习清单</h4>
+                                <ul>
+                                    <li v-for="(item, index) in normalizedJobDeliveryPackageResult.rehearsalChecklist" :key="`delivery-check-${index}-${item}`">{{ item }}</li>
+                                    <li v-if="normalizedJobDeliveryPackageResult.rehearsalChecklist.length === 0">暂无</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <details class="job-raw">
+                            <summary>查看原始 JSON</summary>
+                            <pre>{{ jobDeliveryPackageResultText }}</pre>
+                        </details>
+                    </div>
+                    <div class="job-result-empty" v-else>
+                        <div>
+                            暂无求职成品包<br>
+                            点击“生成求职成品包”，生成自我介绍、项目讲解和收尾话术。
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card" style="margin-top: 16px;">
+                <div class="card-header">
                     <h3 class="card-title">简历版本</h3>
                     <span class="badge">{{ jobPages.resumeVersions.totalElements }}</span>
                 </div>
@@ -1870,6 +1996,7 @@
                             <option value="RESUME_OPTIMIZE">简历优化</option>
                             <option value="INTERVIEW_PREP">面试准备</option>
                             <option value="STAR_INTERVIEW_ANSWER">STAR 答案</option>
+                            <option value="JOB_DELIVERY_PACKAGE">求职成品包</option>
                         </select>
                         <span class="badge">{{ jobPages.generatedTasks.totalElements }}</span>
                     </div>
@@ -2116,22 +2243,60 @@
     <aside class="aside">
         <div class="card identity-card">
             <div class="card-header">
-                <h3 class="card-title">当前身份</h3>
+                <h3 class="card-title">账号</h3>
             </div>
             <div class="card-body">
-                <div class="field">
-                    <label>UserId</label>
-                    <input class="input" v-model="identity.userId" @change="onIdentityChange">
+                <div class="auth-profile" v-if="isAuthenticated">
+                    <div class="auth-avatar">{{ authInitial }}</div>
+                    <div>
+                        <div class="auth-name">{{ currentUserLabel }}</div>
+                        <div class="auth-meta">{{ identity.userId }} · {{ identity.department }}</div>
+                    </div>
+                </div>
+                <div class="auth-switch">
+                    <button class="btn small" :class="{ghost: authMode !== 'login'}" @click="authMode = 'login'">登录</button>
+                    <button class="btn small" :class="{ghost: authMode !== 'register'}" @click="authMode = 'register'">注册</button>
                 </div>
                 <div class="field">
-                    <label>部门</label>
-                    <input class="input" v-model="identity.department" @change="onIdentityChange">
+                    <label>用户名</label>
+                    <input class="input" v-model="authForm.username" autocomplete="username">
                 </div>
-                <div class="toolbar">
+                <div class="field">
+                    <label>密码</label>
+                    <input class="input" type="password" v-model="authForm.password" autocomplete="current-password">
+                </div>
+                <template v-if="authMode === 'register'">
+                    <div class="field">
+                        <label>昵称</label>
+                        <input class="input" v-model="authForm.displayName">
+                    </div>
+                    <div class="field">
+                        <label>部门</label>
+                        <input class="input" v-model="authForm.department">
+                    </div>
+                </template>
+                <div class="toolbar" style="margin-bottom: 12px;">
+                    <button class="btn small" v-if="authMode === 'login'" @click="login">登录</button>
+                    <button class="btn small" v-else @click="register">注册</button>
+                    <button class="btn small ghost" v-if="isAuthenticated" @click="logout">退出</button>
+                    <button class="btn small ghost" v-if="isAuthenticated" @click="loadCurrentUser">刷新</button>
+                </div>
+                <details>
+                    <summary>开发身份切换</summary>
+                    <div class="field">
+                        <label>UserId</label>
+                        <input class="input" v-model="identity.userId" @change="onIdentityChange">
+                    </div>
+                    <div class="field">
+                        <label>部门</label>
+                        <input class="input" v-model="identity.department" @change="onIdentityChange">
+                    </div>
+                    <div class="toolbar">
                     <button class="btn small ghost" @click="switchIdentity('user-1', '研发部')">Owner</button>
                     <button class="btn small ghost" @click="switchIdentity('user-2', '研发部')">同部门</button>
                     <button class="btn small ghost" @click="switchIdentity('user-3', '测试部')">无权限</button>
-                </div>
+                    </div>
+                </details>
             </div>
         </div>
 
@@ -2158,12 +2323,32 @@
 <script>
 const {createApp} = Vue;
 
+function readStoredJson(key) {
+    try {
+        return JSON.parse(localStorage.getItem(key) || "null");
+    } catch (error) {
+        return null;
+    }
+}
+
 window.__aikbApp = createApp({
     data() {
         return {
             activeTab: "overview",
             statusMessage: "工作台已就绪。",
             lastResponse: null,
+            authMode: "login",
+            authForm: {
+                username: "demo-user",
+                password: "secret123",
+                displayName: "Demo User",
+                department: "研发部"
+            },
+            auth: {
+                accessToken: localStorage.getItem("aikb.accessToken") || "",
+                tokenType: localStorage.getItem("aikb.tokenType") || "Bearer",
+                user: readStoredJson("aikb.user")
+            },
             identity: {
                 userId: "user-1",
                 department: "研发部"
@@ -2205,6 +2390,7 @@ window.__aikbApp = createApp({
                 jobDescription: "岗位要求熟悉 Java、Spring Boot、MySQL、Python、FastAPI，有 AI 应用或 RAG 项目经验，了解向量数据库和大模型调用。",
                 interviewQuestion: "RAG 中如何解决幻觉问题？"
             },
+            jobAttachmentFile: null,
             jobFavoriteForm: {
                 jobTitle: "Java 后端开发工程师",
                 companyName: "示例科技公司",
@@ -2222,7 +2408,8 @@ window.__aikbApp = createApp({
             jdParseResult: null,
             resumeOptimizeResult: null,
             interviewPrepResult: null,
-            starInterviewAnswerResult: null
+            starInterviewAnswerResult: null,
+            jobDeliveryPackageResult: null
         };
     },
     computed: {
@@ -2234,6 +2421,18 @@ window.__aikbApp = createApp({
                 jobs: "求职辅助 Agent"
             };
             return titles[this.activeTab] || "企业知识库 RAG";
+        },
+        isAuthenticated() {
+            return Boolean(this.auth.accessToken && this.auth.user);
+        },
+        currentUserLabel() {
+            if (!this.auth.user) {
+                return "未登录";
+            }
+            return this.auth.user.displayName || this.auth.user.username;
+        },
+        authInitial() {
+            return (this.currentUserLabel || "U").slice(0, 1).toUpperCase();
         },
         stats() {
             return {
@@ -2266,6 +2465,9 @@ window.__aikbApp = createApp({
         normalizedStarInterviewAnswerResult() {
             return this.normalizeStarInterviewAnswerResult(this.starInterviewAnswerResult);
         },
+        normalizedJobDeliveryPackageResult() {
+            return this.normalizeJobDeliveryPackageResult(this.jobDeliveryPackageResult);
+        },
         jobResultText() {
             return this.jobResult ? JSON.stringify(this.jobResult, null, 2) : "暂无求职分析结果";
         },
@@ -2284,6 +2486,9 @@ window.__aikbApp = createApp({
         starInterviewAnswerResultText() {
             return this.starInterviewAnswerResult ? JSON.stringify(this.starInterviewAnswerResult, null, 2) : "暂无 STAR 面试答案";
         },
+        jobDeliveryPackageResultText() {
+            return this.jobDeliveryPackageResult ? JSON.stringify(this.jobDeliveryPackageResult, null, 2) : "暂无求职成品包";
+        },
         selectedGeneratedTaskResultText() {
             if (!this.selectedGeneratedTask) {
                 return "暂无生成历史详情";
@@ -2292,9 +2497,21 @@ window.__aikbApp = createApp({
         }
     },
     mounted() {
+        this.syncIdentityFromAuth();
         this.loadInitialData();
     },
     methods: {
+        syncIdentityFromAuth() {
+            if (!this.auth.user) {
+                return;
+            }
+            this.identity.userId = this.auth.user.username || this.identity.userId;
+            this.identity.department = this.auth.user.department || this.identity.department;
+            this.authForm.username = this.auth.user.username || this.authForm.username;
+            this.authForm.displayName = this.auth.user.displayName || this.authForm.displayName;
+            this.authForm.department = this.auth.user.department || this.authForm.department;
+            this.onIdentityChange();
+        },
         userQuery() {
             return `userId=${encodeURIComponent(this.identity.userId)}&department=${encodeURIComponent(this.identity.department)}`;
         },
@@ -2347,7 +2564,14 @@ window.__aikbApp = createApp({
             this.statusMessage = message;
         },
         async requestJson(url, options = {}) {
-            const response = await fetch(url, options);
+            const requestOptions = {...options};
+            const headers = new Headers(requestOptions.headers || {});
+            if (this.auth.accessToken) {
+                headers.set("Authorization", `${this.auth.tokenType || "Bearer"} ${this.auth.accessToken}`);
+            }
+            requestOptions.headers = headers;
+
+            const response = await fetch(url, requestOptions);
             const contentType = response.headers.get("content-type") || "";
             const data = contentType.includes("application/json")
                 ? await response.json()
@@ -2357,6 +2581,75 @@ window.__aikbApp = createApp({
                 throw new Error(data.message || `HTTP ${response.status}`);
             }
             return data.data;
+        },
+        applyAuthResponse(data) {
+            this.auth = {
+                accessToken: data.accessToken,
+                tokenType: data.tokenType || "Bearer",
+                user: data.user
+            };
+            localStorage.setItem("aikb.accessToken", this.auth.accessToken);
+            localStorage.setItem("aikb.tokenType", this.auth.tokenType);
+            localStorage.setItem("aikb.user", JSON.stringify(this.auth.user));
+            this.syncIdentityFromAuth();
+        },
+        async register() {
+            try {
+                const data = await this.requestJson("/api/auth/register", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({
+                        username: this.authForm.username,
+                        password: this.authForm.password,
+                        displayName: this.authForm.displayName,
+                        department: this.authForm.department
+                    })
+                });
+                this.applyAuthResponse(data);
+                await this.loadInitialData();
+                this.setStatus(`注册成功：${this.currentUserLabel}`);
+            } catch (error) {
+                this.setStatus(`注册失败：${error.message}`);
+            }
+        },
+        async login() {
+            try {
+                const data = await this.requestJson("/api/auth/login", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({
+                        username: this.authForm.username,
+                        password: this.authForm.password
+                    })
+                });
+                this.applyAuthResponse(data);
+                await this.loadInitialData();
+                this.setStatus(`登录成功：${this.currentUserLabel}`);
+            } catch (error) {
+                this.setStatus(`登录失败：${error.message}`);
+            }
+        },
+        logout() {
+            this.auth = {
+                accessToken: "",
+                tokenType: "Bearer",
+                user: null
+            };
+            localStorage.removeItem("aikb.accessToken");
+            localStorage.removeItem("aikb.tokenType");
+            localStorage.removeItem("aikb.user");
+            this.setStatus("已退出登录，可继续使用开发身份联调。");
+        },
+        async loadCurrentUser() {
+            try {
+                const user = await this.requestJson("/api/auth/me");
+                this.auth.user = user;
+                localStorage.setItem("aikb.user", JSON.stringify(user));
+                this.syncIdentityFromAuth();
+                this.setStatus(`当前账号已刷新：${this.currentUserLabel}`);
+            } catch (error) {
+                this.setStatus(`刷新账号失败：${error.message}`);
+            }
         },
         async loadInitialData() {
             try {
@@ -2633,6 +2926,25 @@ window.__aikbApp = createApp({
                 this.setStatus(`生成 STAR 答案失败：${error.message}`);
             }
         },
+        async generateJobDeliveryPackage() {
+            try {
+                const data = await this.requestJson("/api/job-agent/delivery-package", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({
+                        userId: this.identity.userId,
+                        resumeText: this.jobForm.resumeText,
+                        jobDescription: this.jobForm.jobDescription
+                    })
+                });
+                this.jobDeliveryPackageResult = data;
+                this.generatedTaskFilter = "JOB_DELIVERY_PACKAGE";
+                await this.loadJobGeneratedTasks(false, 0);
+                this.setStatus(`求职成品包生成完成，准备 ${this.normalizeJobDeliveryPackageResult(data)?.rehearsalChecklist.length ?? 0} 项练习清单。`);
+            } catch (error) {
+                this.setStatus(`生成求职成品包失败：${error.message}`);
+            }
+        },
         async analyzeJob() {
             try {
                 const data = await this.requestJson("/api/job-agent/analyze", {
@@ -2649,6 +2961,36 @@ window.__aikbApp = createApp({
                 this.setStatus(`求职分析完成，匹配分：${data.match_score ?? data.matchScore ?? "-"}`);
             } catch (error) {
                 this.setStatus(`求职分析失败：${error.message}`);
+            }
+        },
+        onJobAttachmentChange(event) {
+            this.jobAttachmentFile = event.target.files && event.target.files[0]
+                ? event.target.files[0]
+                : null;
+        },
+        async analyzeJobFromAttachment() {
+            if (!this.jobAttachmentFile) {
+                this.setStatus("请先选择 JD 截图或 PDF。");
+                return;
+            }
+            if (!this.jobForm.resumeText || !this.jobForm.resumeText.trim()) {
+                this.setStatus("请先填写简历文本。");
+                return;
+            }
+            try {
+                const formData = new FormData();
+                formData.append("userId", this.identity.userId);
+                formData.append("resumeText", this.jobForm.resumeText);
+                formData.append("file", this.jobAttachmentFile);
+                const data = await this.requestJson("/api/job-agent/analyze-from-file", {
+                    method: "POST",
+                    body: formData
+                });
+                this.jobResult = data;
+                await this.loadJobTasks(false, 0);
+                this.setStatus(`附件识别分析完成，匹配分：${data.match_score ?? data.matchScore ?? "-"}`);
+            } catch (error) {
+                this.setStatus(`附件识别分析失败：${error.message}`);
             }
         },
         async loadJobTasks(showStatus = true, page = this.jobPages.tasks.page) {
@@ -2932,6 +3274,7 @@ window.__aikbApp = createApp({
             if (taskType === "RESUME_OPTIMIZE") return "简历优化";
             if (taskType === "INTERVIEW_PREP") return "面试准备";
             if (taskType === "STAR_INTERVIEW_ANSWER") return "STAR 答案";
+            if (taskType === "JOB_DELIVERY_PACKAGE") return "求职成品包";
             return taskType || "未知";
         },
         isBestCompareItem(item) {
@@ -3101,6 +3444,21 @@ window.__aikbApp = createApp({
                 answer: value.answer || "暂无",
                 highlights: this.toList(value.highlights),
                 followUpQuestions: this.toList(value.follow_up_questions ?? value.followUpQuestions)
+            };
+        },
+        normalizeJobDeliveryPackageResult(value) {
+            if (!value) {
+                return null;
+            }
+
+            return {
+                targetPosition: value.target_position ?? value.targetPosition ?? "未识别",
+                selfIntroduction: value.self_introduction ?? value.selfIntroduction ?? "暂无",
+                projectPitch: value.project_pitch ?? value.projectPitch ?? "暂无",
+                architectureTalkingPoints: this.toList(value.architecture_talking_points ?? value.architectureTalkingPoints),
+                riskResponse: this.toList(value.risk_response ?? value.riskResponse),
+                closingStatement: value.closing_statement ?? value.closingStatement ?? "暂无",
+                rehearsalChecklist: this.toList(value.rehearsal_checklist ?? value.rehearsalChecklist)
             };
         },
         exportJobAnalysisReport() {
@@ -3310,6 +3668,47 @@ window.__aikbApp = createApp({
             ].join("\n");
             this.downloadMarkdown("star-interview-answer.md", content);
             this.setStatus("STAR 面试答案已导出。");
+        },
+        exportJobDeliveryPackageReport() {
+            const result = this.normalizedJobDeliveryPackageResult;
+            if (!result) {
+                this.setStatus("暂无求职成品包可导出。");
+                return;
+            }
+            const content = [
+                "# 求职成品包",
+                "",
+                `生成时间：${this.formatDate(new Date().toISOString())}`,
+                "",
+                `目标岗位：${result.targetPosition}`,
+                "",
+                "## 自我介绍",
+                "",
+                result.selfIntroduction || "暂无",
+                "",
+                "## 项目讲解稿",
+                "",
+                result.projectPitch || "暂无",
+                "",
+                "## 架构讲点",
+                "",
+                this.markdownList(result.architectureTalkingPoints),
+                "",
+                "## 风险应对",
+                "",
+                this.markdownList(result.riskResponse),
+                "",
+                "## 收尾话术",
+                "",
+                result.closingStatement || "暂无",
+                "",
+                "## 练习清单",
+                "",
+                this.markdownList(result.rehearsalChecklist),
+                ""
+            ].join("\n");
+            this.downloadMarkdown("job-delivery-package.md", content);
+            this.setStatus("求职成品包已导出。");
         },
         markdownList(items) {
             const values = this.toList(items);
