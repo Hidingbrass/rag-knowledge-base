@@ -3,10 +3,15 @@ package com.example.aikb.client;
 import com.example.aikb.config.FastApiProperties;
 import com.example.aikb.exception.BusinessException;
 import com.example.aikb.service.AiCallLogService;
+import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
+
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -16,12 +21,88 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 import static org.springframework.http.HttpMethod.POST;
+import static org.springframework.http.HttpMethod.DELETE;
 
 class FastApiRagClientTests {
+
+    @Test
+    void askWithRerankShouldSendHybridSparseContract() {
+        TestClient testClient = newTestClient();
+        testClient.server.expect(requestTo("http://fastapi.test/rag/chat/rerank"))
+                .andExpect(method(POST))
+                .andExpect(content().json("""
+                        {
+                          "question": "什么是 RAG？",
+                          "candidate_k": 6,
+                          "rerank_top_k": 3,
+                          "rerank_min_score": 0.75,
+                          "retrieval_mode": "hybrid",
+                          "sparse_limit": 6,
+                          "document_id": "doc-1"
+                        }
+                        """))
+                .andRespond(withSuccess("""
+                        {
+                          "question": "什么是 RAG？",
+                          "answer": "检索增强生成 [1]。",
+                          "sources": [],
+                          "retrieval_mode": "rerank",
+                          "candidate_retrieval_mode": "hybrid",
+                          "rerank_error": null,
+                          "rerank_elapsed_seconds": 0.1
+                        }
+                        """, MediaType.APPLICATION_JSON));
+
+        var response = testClient.client.askWithRerank("什么是 RAG？", "doc-1");
+
+        assertThat(response.candidateRetrievalMode()).isEqualTo("hybrid");
+        testClient.server.verify();
+    }
+
+    @Test
+    void streamAskWithRerankShouldConsumeNdjsonEventsInOrder() {
+        TestClient testClient = newTestClient();
+        testClient.server.expect(requestTo("http://fastapi.test/rag/chat/rerank/stream"))
+                .andExpect(method(POST))
+                .andExpect(content().json("""
+                        {
+                          "question": "什么是 RAG？",
+                          "candidate_k": 6,
+                          "rerank_top_k": 3,
+                          "rerank_min_score": 0.75,
+                          "retrieval_mode": "hybrid",
+                          "sparse_limit": 6,
+                          "document_id": "doc-1"
+                        }
+                        """))
+                .andRespond(withSuccess("""
+                        {"type":"status","stage":"retrieving","message":"正在检索"}
+                        {"type":"delta","content":"检索增强"}
+                        {"type":"delta","content":"生成"}
+                        {"type":"done","retrieval_mode":"rerank"}
+                        """, MediaType.parseMediaType("application/x-ndjson")));
+
+        List<JsonNode> events = new ArrayList<>();
+        testClient.client.streamAskWithRerank("什么是 RAG？", "doc-1", events::add);
+
+        assertThat(events).extracting(event -> event.path("type").asText())
+                .containsExactly("status", "delta", "delta", "done");
+        assertThat(events.get(1).path("content").asText()).isEqualTo("检索增强");
+        verify(testClient.logService).recordFastApiCall(
+                eq("RAG_RERANK_CHAT_STREAM"),
+                eq("/rag/chat/rerank/stream"),
+                eq(true),
+                anyLong(),
+                eq(null)
+        );
+        testClient.server.verify();
+    }
 
     @Test
     void analyzeJobShouldRecordSuccessfulFastApiCall() {
@@ -54,6 +135,25 @@ class FastApiRagClientTests {
     }
 
     @Test
+    void deleteDocumentShouldCallInternalVectorCleanupEndpoint() {
+        TestClient testClient = newTestClient();
+        testClient.server.expect(requestTo("http://fastapi.test/documents/vector-doc-1"))
+                .andExpect(method(DELETE))
+                .andRespond(withSuccess());
+
+        testClient.client.deleteDocument("vector-doc-1");
+
+        verify(testClient.logService).recordFastApiCall(
+                eq("DOCUMENT_DELETE"),
+                eq("/documents/{documentId}"),
+                eq(true),
+                anyLong(),
+                eq(null)
+        );
+        testClient.server.verify();
+    }
+
+    @Test
     void analyzeJobShouldRecordFailedFastApiCall() {
         TestClient testClient = newTestClient();
         testClient.server.expect(requestTo("http://fastapi.test/job/analyze"))
@@ -71,6 +171,28 @@ class FastApiRagClientTests {
                 anyLong(),
                 contains("500")
         );
+        testClient.server.verify();
+    }
+
+    @Test
+    void analyzeJobShouldExposeSafeFastApiErrorMessage() {
+        TestClient testClient = newTestClient();
+        testClient.server.expect(requestTo("http://fastapi.test/job/analyze"))
+                .andExpect(method(POST))
+                .andRespond(withStatus(HttpStatus.BAD_GATEWAY)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body("""
+                                {
+                                  "error_code": "UPSTREAM_SERVICE_ERROR",
+                                  "message": "Embedding 服务调用失败，请稍后重试"
+                                }
+                                """));
+
+        assertThatThrownBy(() -> testClient.client.analyzeJob("Spring Boot RAG 项目", "需要 Java"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("调用 FastAPI 求职分析服务失败")
+                .hasMessageContaining("Embedding 服务调用失败，请稍后重试");
+
         testClient.server.verify();
     }
 

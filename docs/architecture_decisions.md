@@ -251,8 +251,9 @@ Flyway 把数据库结构变成可审查、可提交、可回放的版本化代�
 决策：
 
 ```text
-Spring Boot 在 FastApiRagClient 统一记录调用 FastAPI 的业务类型、接口、耗时、成功失败和错误摘要。
-日志保存到 MySQL ai_call_log 表，并提供最近调用查询接口供工作台展示。
+Spring Boot 在 FastApiRagClient 统一记录调用 FastAPI 的业务类型、接口、耗时、成功失败、错误摘要、
+模型名、重试次数、Token 和估算费用。
+日志保存到 MySQL ai_call_log 表，并提供最近调用和时间窗口聚合接口供工作台展示。
 ```
 
 原因：
@@ -267,12 +268,131 @@ Spring Boot 是业务入口，知道一次调用属于文档入库、RAG 问答�
 ```text
 可以排查 AI 服务慢调用和失败调用。
 面试演示时能说明系统具备基础可观测性，而不是只会调用模型。
-后续如果 FastAPI 返回 token usage，可以继续把 token 成本补进同一张日志表或扩展表。
+FastAPI 返回请求级模型 usage 后，可直接形成 24 小时成功率、平均/P95 延迟、Token、费用和分业务统计。
 ```
 
 代价：
 
 ```text
-当前记录的是 Spring Boot 调 FastAPI 的服务间调用日志，不直接记录 DashScope token 明细。
+Token 和费用依赖上游 usage 与配置单价；没有 usage 的调用记为 0，估算费用不能替代供应商账单。
 日志保存失败不能影响主链路，因此日志 Service 会吞掉自身写入异常并输出 warn 日志。
+```
+
+## ADR-010：使用 Dense + Sparse + RRF 作为 Hybrid 候选检索
+
+决策：
+
+```text
+Qdrant Collection 使用 dense 和 sparse 两类命名向量。
+Dense 分支使用通义千问 Embedding，Sparse 分支使用可解释的中英文词法特征。
+Qdrant 对两路候选执行 Reciprocal Rank Fusion（RRF），融合结果再交给 qwen3-rerank 精排。
+```
+
+原因：
+
+```text
+Dense 检索擅长语义相似，但可能漏掉型号、缩写、专有名词等精确词项。
+Sparse 检索可以补充词法匹配，但单独使用又容易漏掉同义表达。
+RRF 只依赖两路排序名次，不要求 Dense 和 Sparse 分数处在同一量纲，适合异构召回融合。
+```
+
+实现约束：
+
+```text
+Sparse 编码包含英文技术词、中文字符 bi-gram/tri-gram、稳定哈希维度和 BM25 风格 TF 饱和。
+Collection 级 IDF 由 Qdrant SparseVectorParams 的 IDF modifier 计算。
+该实现没有计算完整 BM25 的文档长度归一化，因此对外称为 Sparse Lexical Retrieval，不夸大为完整 BM25。
+```
+
+收益：
+
+```text
+删除了原先 scroll 1000 个 Chunk 后在 Python 中做字符串包含判断的线性扫描。
+候选召回由 Qdrant Dense HNSW、Sparse 倒排索引和服务端 RRF 完成。
+Source 明确区分 vector_score、sparse_score、fusion_score 和 rerank_score。
+新增消融脚本，可对比 Vector、Sparse、Hybrid RRF、Hybrid RRF + Rerank 的命中率与延迟。
+```
+
+代价：
+
+```text
+旧版单向量 Collection 与命名向量结构不兼容，需要重建 Collection 并重新上传文档。
+Sparse 哈希存在理论碰撞概率，中文字符 n-gram 也可能带来额外噪声，需要通过评测集持续校准。
+RRF 分数不能直接当成语义相似度阈值，因此最终拒答仍使用 Rerank 分数；Rerank 故障时重新执行 Dense fallback。
+```
+
+## ADR-011：使用版本化企业技术语料和 Gold Document 评测
+
+决策：
+
+```text
+把当前项目的真实架构、接口、安全、运维和评测规则整理成六份独立技术文档。
+Markdown 作为可审查事实源，PDF 作为真实入库资产，manifest 固定文档编号和文件名。
+独立评测集使用 PDF 文件名作为 gold source，并允许一道题包含多个 gold document。
+```
+
+原因：
+
+```text
+单份两页文稿只能验证最短 RAG 链路，容易得到过于理想且缺乏代表性的页码命中结果。
+企业技术检索经常包含配置名、错误码、语义改写、跨文档问题和无答案问题，需要多文档数据集。
+稳定文件名比生成后的页码更适合作为跨文档检索真值。
+```
+
+收益：
+
+```text
+演示数据与当前代码事实一致，可由脚本重复生成和上传。
+消融评测除 Hit@K 外增加 MRR、gold document recall 和完整 gold 命中率。
+PDF 逐页渲染和关键词一致性测试可以提前发现排版错误、空文档和标注漂移。
+```
+
+代价：
+
+```text
+六份文档会增加 Embedding 与 Rerank 在线实验成本，批量上传还要遵守每分钟 AI 限流。
+当前评测集仍是人工构建的小规模工程集，不能代表生产流量，后续需要真实匿名 hard cases 扩充。
+```
+
+## ADR-012：采用确定性输出校验和分层不可信输入防护
+
+决策：
+
+```text
+RAG 输出先做拒答和引用编号的确定性校验，不再额外调用一个模型充当唯一裁判。
+用户问题、检索片段、简历和 JD 都作为不可信数据包裹；只有“越权指令 + 密钥/系统提示提取”组合命中时阻断。
+联系方式等非任务必要信息在模型调用前脱敏，MySQL 敏感文本可使用 AES-256-GCM 字段级加密。
+```
+
+原因：
+
+```text
+让模型验证模型会继续引入幻觉、延迟和费用，引用编号与字段范围更适合由程序确定性判断。
+单关键词封禁会误伤“如何防范提示词注入”等正常学习问题，因此采用组合信号和数据边界提示。
+业务数据需要同时覆盖传输给模型前的最小化和落库后的泄露风险。
+```
+
+边界：
+
+```text
+规则只能防住已建模的高置信攻击，不宣称完全解决提示词注入。
+AES 密钥必须由部署环境通过 SENSITIVE_DATA_ENCRYPTION_KEY 提供并妥善备份；未配置时本地开发保持兼容明文。
+```
+
+## ADR-013：在模型适配层统一用量统计、受控重试和轻量熔断
+
+决策：
+
+```text
+Embedding、Rerank 和 Chat 在同一请求上下文中记录模型、尝试次数、Token、耗时和估算费用。
+仅对连接失败、超时、429 和 5xx 指数退避重试；连续失败达到阈值后按模型能力开启进程内熔断。
+流式响应一旦开始输出，不自动重放，避免内容重复和重复计费。
+```
+
+原因与边界：
+
+```text
+瞬时故障值得短暂重试，参数错误和鉴权错误重试没有意义。
+当前熔断状态仅在单个 FastAPI 进程内生效；多副本生产部署应改用集中指标和网关/服务网格治理。
+估算成本来自可配置单价，模型价格变化后需要同步环境变量。
 ```

@@ -577,7 +577,7 @@ FastAPI 侧重点是 AI 服务逻辑：
 当前 FastAPI 全量测试：
 
 ```text
-96 passed
+128 passed
 ```
 
 ### Spring Boot 测试
@@ -612,7 +612,7 @@ Spring Boot 侧重点是业务链路和数据库保存：
 当前 Spring Boot 全量测试：
 
 ```text
-57 passed
+100 passed
 ```
 
 ## 9. 前端演示

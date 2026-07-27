@@ -15,6 +15,19 @@ public record FastApiResumeOptimizeResponse(
         @JsonProperty("missing_keywords")
         List<String> missingKeywords,
         @JsonProperty("action_items")
-        List<String> actionItems
-) {
+        List<String> actionItems,
+        @JsonProperty("model_usage")
+        FastApiModelUsage modelUsage
+) implements FastApiUsageCarrier {
+    public FastApiResumeOptimizeResponse(
+            String summary,
+            String targetPosition,
+            List<String> gapSummary,
+            List<FastApiResumeRewriteSuggestion> rewriteSuggestions,
+            List<String> missingKeywords,
+            List<String> actionItems
+    ) {
+        this(summary, targetPosition, gapSummary, rewriteSuggestions, missingKeywords,
+                actionItems, null);
+    }
 }

@@ -71,17 +71,17 @@ Rerank 的核心价值是二次排序。向量检索负责粗召回，Rerank 负
 
 ```text
 问题
--> 向量检索召回 candidate_k
--> 关键词检索召回 keyword_limit
--> 根据 document_id + chunk_index 等 source key 合并去重
--> 保留 vector_score / keyword_score
+-> Dense 向量检索召回 candidate_k
+-> Sparse 倒排检索召回 sparse_limit
+-> Qdrant 使用 RRF 融合两路排名
+-> 保留 fusion_score
 -> 交给 Rerank 做统一排序
 ```
 
 面试表达：
 
 ```text
-Hybrid 检索解决的是单纯向量检索可能漏掉关键词强相关片段的问题。向量检索擅长语义相似，关键词检索擅长精确词命中，两者合并后再交给 Rerank 排序。
+Hybrid 检索解决的是单纯向量检索可能漏掉专有名词、缩写和型号的问题。Dense 检索负责语义相似，Sparse 倒排检索负责词法命中；两路分数不在同一量纲，所以先由 Qdrant 用 RRF 融合排名，再交给 Rerank 精排。
 ```
 
 ## 3. 为什么这样设计
@@ -178,7 +178,7 @@ RAG 不是只要回答出来就行。知识库没有资料时，如果模型强�
 自动化测试：
 
 ```text
-FastAPI pytest：96 passed。
+FastAPI pytest：128 passed。
 ```
 
 无 Rerank 检索历史基线：
@@ -274,7 +274,7 @@ RAG 只是给模型提供外部资料，但不能保证检索一定命中、资�
 回答：
 
 ```text
-Hybrid 会带来更多候选，也可能引入关键词噪声。所以我没有直接把关键词结果送进 Prompt，而是先和向量结果合并去重，再交给 Rerank 统一排序。评测脚本也支持 vector/hybrid 对比，并根据 rerank_hit_rate 和拒答准确率推荐模式。
+Hybrid 会带来更多候选，中文字符 n-gram 也可能引入词法噪声。因此我没有把 Sparse 结果直接送入 Prompt，而是用 Qdrant RRF 融合，再交给 Rerank 精排。项目提供四路消融脚本，同时明确新 Collection 重建后的真实结果尚需重新测量。
 ```
 
 ### Q9：这个项目怎么接 Spring Boot？
@@ -290,7 +290,7 @@ FastAPI 作为 AI 服务，负责文档解析、Embedding、向量库、检索�
 回答：
 
 ```text
-目前评测集规模还比较小，主要用于学习和回归验证；Chunk 支持率仍然带有关键词规则的简化判断；权限使用 userId 和 department 模拟，还没有接入真实登录认证和异步任务队列。下一步可以补 Spring Security/JWT、异步解析、SSE 流式输出、调用日志和监控告警。
+目前评测集规模还比较小，主要用于学习和回归验证；Chunk 支持率仍然带有关键词规则的简化判断。当前已经接入 Spring Security + JWT、Redis 限流、AI 调用成功率/P95/Token/成本聚合和 AI 伴学 NDJSON 流式输出，但还没有异步任务队列、OpenTelemetry 链路追踪和多实例共享熔断。
 ```
 
 ## 7. 自我介绍中可以怎么带出来

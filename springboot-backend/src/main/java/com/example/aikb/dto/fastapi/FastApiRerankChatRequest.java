@@ -23,8 +23,8 @@ public record FastApiRerankChatRequest(
         @JsonProperty("retrieval_mode")
         String retrievalMode,
 
-        @JsonProperty("keyword_limit")
-        int keywordLimit,
+        @JsonProperty("sparse_limit")
+        int sparseLimit,
 
         @JsonProperty("document_id")
         String documentId

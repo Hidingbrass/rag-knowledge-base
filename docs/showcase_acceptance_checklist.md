@@ -27,11 +27,13 @@
 | 能力 | 证明方式 | 验收标准 |
 | --- | --- | --- |
 | 完整启动 | `docker compose up --build -d` 或本地开发启动 | Spring Boot、FastAPI、MySQL、Qdrant 都能正常启动 |
-| 健康检查 | `/api/health`、`/health`、`/qdrant/health` | 接口返回正常状态 |
-| PDF 入库 | 前端上传 `rag-learning-test-document.pdf` | 文档状态从处理中变为 `AVAILABLE` |
+| 健康检查 | Spring `/api/health` + `scripts/smoke_check.sh` 内网检查 FastAPI | 接口返回正常状态 |
+| 多格式入库 | 分别上传 PDF、Markdown、DOCX 或 TXT | 支持格式可解析，文档状态从处理中变为 `AVAILABLE` |
+| 资料库管理 | 修改后删除本人资料库 | 修改立即生效；删除时关联向量、文档、会话和消息一起清理 |
+| 个人资料 | 修改昵称和学习方向 | 页面立即更新，并签发包含最新资料的新 JWT |
 | RAG 问答 | 前端创建会话并提问 | 返回答案和引用来源 |
 | 拒答能力 | 提问与文档无关的问题 | 系统不强行编造答案 |
-| 权限控制 | 切换不同 userId / department | 无权限用户不能访问受限知识库、文档或会话 |
+| 权限控制 | 两个同学习方向 JWT 账号交叉访问 | 非 owner 不能访问个人知识库、文档或会话 |
 | 会话持久化 | 刷新页面或重启服务 | 历史会话和消息仍能从 MySQL 读取 |
 | 求职分析 | 前端或 `scripts/demo_job_agent.sh` | 返回匹配分、技能、风险、建议和面试题，并保存历史 |
 | 简历/JD 解析 | 前端求职 Agent 区域 | 能提取结构化技能、项目、关键词和风险点 |
@@ -62,9 +64,8 @@ bash scripts/smoke_check.sh
 
 ```bash
 curl http://127.0.0.1:8080/api/health
-curl http://127.0.0.1:8000/health
-curl http://127.0.0.1:8000/qdrant/health
 curl http://127.0.0.1:6333/collections
+bash scripts/smoke_check.sh
 ```
 
 最后做页面演示：
@@ -96,7 +97,7 @@ bash scripts/demo_job_agent.sh
 6. 简历优化建议
 7. 面试准备包或 STAR 答案
 8. 历史记录、对比面板或 Markdown 导出
-9. FastAPI Swagger 页面
+9. 本地开发模式下带 `X-API-Key` 授权的 FastAPI Swagger 页面
 10. Docker Compose 容器运行状态
 ```
 
@@ -149,7 +150,7 @@ AI 链路真的能调用
 如果被问到这些方向，可以回答：
 
 ```text
-当前版本重点是学习和简历展示，已经把服务边界、数据边界、权限边界和测试边界打好。生产化下一步会补 Spring Security/JWT、限流、监控告警、异步任务队列、对象存储和部署流水线。
+当前版本重点是学习和简历展示，已经完成 Spring Security/JWT、Redis 限流、AI 调用成功率/P95/Token/成本聚合，并把服务边界、数据边界、权限边界和测试边界打好。生产化下一步会补 OpenTelemetry、异步任务队列、对象存储和部署流水线。
 ```
 
 ## 7. 当前可展示结论

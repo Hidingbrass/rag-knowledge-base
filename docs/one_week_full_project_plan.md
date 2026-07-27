@@ -130,7 +130,7 @@ FastAPI AI 服务
   - Chunk 切分
   - Embedding
   - Qdrant
-  - Vector / Hybrid 检索
+  - Dense / Sparse / Hybrid RRF 检索
   - qwen3-rerank
   - RAG 生成
   - 评测脚本
@@ -242,7 +242,7 @@ Spring Boot 更适合承载企业业务系统，比如用户、权限、知识�
 目标：
 
 - 做基础用户和角色。
-- 知识库按 owner 或 department 做隔离。
+- 个人学习知识库按 owner 隔离，department 仅保留为学习方向元数据。
 - Redis 先做简单限流或预留。
 - 补统一异常、日志、配置注释。
 
@@ -434,7 +434,7 @@ Content-Type: application/json
   "rerank_top_k": 3,
   "rerank_min_score": 0.75,
   "retrieval_mode": "hybrid",
-  "keyword_limit": 6,
+  "sparse_limit": 6,
   "document_id": "可选"
 }
 ```
@@ -491,4 +491,3 @@ Content-Type: application/json
 ```
 
 推荐方案 A。原因是这一周要快速集成成一个完整项目，放在同一个仓库里更方便写 README、Docker Compose 和演示脚本。
-

@@ -8,7 +8,6 @@ public record ResumeOptimizeRequest(
         @NotBlank(message = "简历内容不能为空")
         String resumeText,
 
-        @NotBlank(message = "岗位 JD 不能为空")
         String jobDescription
 ) {
 }

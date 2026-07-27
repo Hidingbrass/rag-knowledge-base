@@ -14,10 +14,12 @@ import com.example.aikb.dto.job.InterviewPrepRequest;
 import com.example.aikb.dto.job.JdParseRequest;
 import com.example.aikb.dto.job.JobAnalysisTaskResponse;
 import com.example.aikb.dto.job.JobAnalyzeRequest;
+import com.example.aikb.dto.job.JobAnalyzeFromFileResponse;
 import com.example.aikb.dto.job.JobDeliveryPackageRequest;
 import com.example.aikb.dto.job.JobFavoriteRequest;
 import com.example.aikb.dto.job.JobFavoriteResponse;
 import com.example.aikb.dto.job.JobGeneratedTaskResponse;
+import com.example.aikb.dto.job.JobGeneratedTaskReviewRequest;
 import com.example.aikb.dto.job.JobResumeVersionRequest;
 import com.example.aikb.dto.job.JobResumeVersionResponse;
 import com.example.aikb.dto.job.JobTaskCompareRequest;
@@ -33,6 +35,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -70,7 +73,7 @@ public class JobAgentController {
     }
 
     @PostMapping(value = "/analyze-from-file", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ApiResponse<FastApiJobAnalyzeResponse> analyzeFromFile(
+    public ApiResponse<JobAnalyzeFromFileResponse> analyzeFromFile(
             @AuthenticationPrincipal AuthenticatedUser currentUser,
             @RequestParam(required = false) String userId,
             @RequestParam String resumeText,
@@ -220,6 +223,22 @@ public class JobAgentController {
     ) {
         jobAgentService.deleteGeneratedTask(taskId, userIdOrRequestParam(currentUser, userId));
         return ApiResponse.ok(null);
+    }
+
+    @PatchMapping("/generated-tasks/{taskId}/review")
+    public ApiResponse<JobGeneratedTaskResponse> reviewGeneratedTask(
+            @AuthenticationPrincipal AuthenticatedUser currentUser,
+            @PathVariable UUID taskId,
+            @Valid @RequestBody JobGeneratedTaskReviewRequest request
+    ) {
+        return ApiResponse.ok(jobAgentService.reviewGeneratedTask(
+                taskId,
+                new JobGeneratedTaskReviewRequest(
+                        userIdOrRequestParam(currentUser, request.userId()),
+                        request.status(),
+                        request.comment()
+                )
+        ));
     }
 
     @PostMapping("/resume-versions")

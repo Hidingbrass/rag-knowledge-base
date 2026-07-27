@@ -33,6 +33,7 @@ from app.schemas.job import (
     StarInterviewAnswerRequest,
     StarInterviewAnswerResponse,
 )
+from app.services.ai_safety_service import ensure_safe_model_input, wrap_untrusted_data
 from app.services.qwen_service import chat_completion
 
 
@@ -52,6 +53,7 @@ def analyze_job_match(request: JobAnalyzeRequest) -> JobAnalyzeResponse:
     if not request.job_description.strip():
         raise BadRequestError("岗位 JD 不能为空")
 
+    ensure_safe_model_input(request.resume_text, request.job_description)
     messages = build_job_analyze_messages(request)
     raw_answer = chat_completion(messages)
 
@@ -99,11 +101,9 @@ def build_job_analyze_messages(request: JobAnalyzeRequest) -> list[dict]:
 
     user_prompt = dedent(
         f"""
-        简历内容：
-        {request.resume_text.strip()}
+        {wrap_untrusted_data("resume", request.resume_text)}
 
-        岗位 JD：
-        {request.job_description.strip()}
+        {wrap_untrusted_data("job_description", request.job_description)}
         """
     ).strip()
 
@@ -116,8 +116,8 @@ def build_job_analyze_messages(request: JobAnalyzeRequest) -> list[dict]:
 def parse_job_analyze_response(raw_answer: str) -> JobAnalyzeResponse:
     """把模型返回解析成 JobAnalyzeResponse。
 
-    模型有时会把 JSON 包在 ```json 代码块里，所以这里不直接 json.loads(raw_answer)，
-    而是截取第一个 { 到最后一个 } 之间的内容再解析。
+    模型有时会把 JSON 包在代码块或说明文字里，所以先提取并规范化第一个
+    合法 JSON 对象，再交给 Pydantic 校验业务字段。
     """
     json_text = extract_json_object(raw_answer)
 
@@ -126,7 +126,7 @@ def parse_job_analyze_response(raw_answer: str) -> JobAnalyzeResponse:
     except JSONDecodeError as error:
         raise BadRequestError(
             "模型返回的求职分析结果不是合法 JSON",
-            details={"raw_answer": raw_answer[:500]},
+            details={"response_length": len(raw_answer)},
         ) from error
 
     try:
@@ -139,16 +139,31 @@ def parse_job_analyze_response(raw_answer: str) -> JobAnalyzeResponse:
 
 
 def extract_json_object(text: str) -> str:
-    """从模型文本中提取 JSON 对象字符串。"""
+    """提取并规范化模型文本里的第一个合法 JSON 对象。
+
+    JSON mode 是主保障；这里继续兼容历史模型返回的代码块、前后说明、
+    多个对象，以及字符串内未经转义的换行，不再次调用模型修复格式。
+    """
+    decoder = json.JSONDecoder(strict=False)
+    for start, character in enumerate(text):
+        if character != "{":
+            continue
+        try:
+            data, _ = decoder.raw_decode(text[start:])
+        except JSONDecodeError:
+            continue
+        if isinstance(data, dict):
+            return json.dumps(data, ensure_ascii=False)
+
     start = text.find("{")
     end = text.rfind("}")
-
     if start == -1 or end == -1 or end <= start:
         raise BadRequestError(
             "模型没有返回 JSON 对象",
-            details={"raw_answer": text[:500]},
+            details={"response_length": len(text)},
         )
 
+    # 保留原始非法片段，让各业务解析器返回对应的明确错误和解码位置。
     return text[start:end + 1]
 
 
@@ -188,8 +203,7 @@ def build_resume_parse_messages(request: ResumeParseRequest) -> list[dict]:
 
     user_prompt = dedent(
         f"""
-        简历内容：
-        {request.resume_text.strip()}
+        {wrap_untrusted_data("resume", request.resume_text)}
         """
     ).strip()
 
@@ -206,7 +220,7 @@ def parse_resume_parse_response(raw_answer: str) -> ResumeParseResponse:
     except JSONDecodeError as error:
         raise BadRequestError(
             "模型返回的简历结构化结果不是合法 JSON",
-            details={"raw_answer": raw_answer[:500]},
+            details={"response_length": len(raw_answer)},
         ) from error
     try:
         return ResumeParseResponse(**data)
@@ -221,6 +235,7 @@ def parse_resume(request: ResumeParseRequest) -> ResumeParseResponse:
     if not request.resume_text.strip():
         raise BadRequestError("简历内容不能为空")
 
+    ensure_safe_model_input(request.resume_text)
     messages = build_resume_parse_messages(request)
     raw_answer = chat_completion(messages)
 
@@ -253,8 +268,7 @@ def build_jd_parse_messages(request: JdParseRequest) -> list[dict]:
 
     user_prompt = dedent(
         f"""
-        岗位 JD：
-        {request.job_description.strip()}
+        {wrap_untrusted_data("job_description", request.job_description)}
         """
     ).strip()
 
@@ -271,7 +285,7 @@ def parse_jd_parse_response(raw_answer: str) -> JdParseResponse:
     except JSONDecodeError as error:
         raise BadRequestError(
             "模型返回的 JD 结构化结果不是合法 JSON",
-            details={"raw_answer": raw_answer[:500]},
+            details={"response_length": len(raw_answer)},
         ) from error
     try:
         return JdParseResponse(**data)
@@ -286,6 +300,7 @@ def parse_jd(request: JdParseRequest) -> JdParseResponse:
     if not request.job_description.strip():
         raise BadRequestError("岗位 JD 不能为空")
 
+    ensure_safe_model_input(request.job_description)
     messages = build_jd_parse_messages(request)
     raw_answer = chat_completion(messages)
 
@@ -293,10 +308,21 @@ def parse_jd(request: JdParseRequest) -> JdParseResponse:
 
 
 def build_resume_optimize_messages(request: ResumeOptimizeRequest) -> list[dict]:
+    has_target_jd = bool(request.job_description.strip())
+    optimization_mode = (
+        "用户提供了目标岗位 JD：请进行针对岗位的简历优化，识别岗位关键词和能力差距。"
+        if has_target_jd
+        else (
+            "用户没有提供目标岗位 JD：请进行通用简历质量优化，重点检查表达清晰度、"
+            "成果量化、技术深度、项目可信度和信息完整性。target_position 可根据简历"
+            "已有信息识别；无法识别时填写“通用简历优化”。"
+        )
+    )
     system_prompt = dedent(
-        """
+        f"""
         你是简历优化顾问。
-        请根据用户提供的简历文本和岗位 JD，生成更匹配该岗位的简历优化建议。
+        岗位 JD 是可选信息。
+        {optimization_mode}
         你必须只输出 JSON，不要输出 Markdown，不要输出额外解释。
 
         JSON 字段必须包含：
@@ -323,19 +349,23 @@ def build_resume_optimize_messages(request: ResumeOptimizeRequest) -> list[dict]
 
         原则：
         - 不要编造用户没有做过的经历。
-        - 可以把已有经历改写得更贴合 JD。
+        - 有 JD 时，可以把已有经历改写得更贴合 JD。
+        - 无 JD 时，只能根据简历已有内容改善表达与结构，不得虚构岗位要求。
         - 如果缺少经历，请放到 missing_keywords 或 action_items，不要伪造成已完成经验。
         - 如果某个字段无法识别，请返回空数组或“未识别”，不要省略字段。
         """
     ).strip()
 
+    jd_section = (
+        wrap_untrusted_data("job_description", request.job_description)
+        if has_target_jd
+        else "岗位 JD：\n未提供，请按通用简历优化模式处理。"
+    )
     user_prompt = dedent(
         f"""
-        简历内容：
-        {request.resume_text.strip()}
+        {wrap_untrusted_data("resume", request.resume_text)}
 
-        岗位 JD：
-        {request.job_description.strip()}
+        {jd_section}
         """
     ).strip()
 
@@ -352,7 +382,7 @@ def parse_resume_optimize_response(raw_answer: str) -> ResumeOptimizeResponse:
     except JSONDecodeError as error:
         raise BadRequestError(
             "模型返回的简历优化结果不是合法 JSON",
-            details={"raw_answer": raw_answer[:500]},
+            details={"response_length": len(raw_answer)},
         ) from error
     try:
         return ResumeOptimizeResponse(**data)
@@ -367,9 +397,7 @@ def optimize_resume(request: ResumeOptimizeRequest) -> ResumeOptimizeResponse:
     if not request.resume_text.strip():
         raise BadRequestError("简历内容不能为空")
 
-    if not request.job_description.strip():
-        raise BadRequestError("岗位 JD 不能为空")
-
+    ensure_safe_model_input(request.resume_text, request.job_description)
     messages = build_resume_optimize_messages(request)
     raw_answer = chat_completion(messages)
 
@@ -421,11 +449,9 @@ def build_interview_prep_messages(request: InterviewPrepRequest) -> list[dict]:
 
     user_prompt = dedent(
         f"""
-        简历内容：
-        {request.resume_text.strip()}
+        {wrap_untrusted_data("resume", request.resume_text)}
 
-        岗位 JD：
-        {request.job_description.strip()}
+        {wrap_untrusted_data("job_description", request.job_description)}
         """
     ).strip()
 
@@ -442,7 +468,11 @@ def parse_interview_prep_response(raw_answer: str) -> InterviewPrepResponse:
     except JSONDecodeError as error:
         raise BadRequestError(
             "模型返回的面试准备包不是合法 JSON",
-            details={"raw_answer": raw_answer[:500]},
+            details={
+                "response_length": len(raw_answer),
+                "json_error": error.msg,
+                "json_error_position": error.pos,
+            },
         ) from error
     try:
         return InterviewPrepResponse(**data)
@@ -460,6 +490,7 @@ def prepare_interview(request: InterviewPrepRequest) -> InterviewPrepResponse:
     if not request.job_description.strip():
         raise BadRequestError("岗位 JD 不能为空")
 
+    ensure_safe_model_input(request.resume_text, request.job_description)
     messages = build_interview_prep_messages(request)
     raw_answer = chat_completion(messages)
 
@@ -497,14 +528,11 @@ def build_star_interview_answer_messages(request: StarInterviewAnswerRequest) ->
 
     user_prompt = dedent(
         f"""
-        简历内容：
-        {request.resume_text.strip()}
+        {wrap_untrusted_data("resume", request.resume_text)}
 
-        岗位 JD：
-        {request.job_description.strip()}
+        {wrap_untrusted_data("job_description", request.job_description)}
 
-        面试问题：
-        {request.question.strip()}
+        {wrap_untrusted_data("interview_question", request.question)}
         """
     ).strip()
 
@@ -521,7 +549,7 @@ def parse_star_interview_answer_response(raw_answer: str) -> StarInterviewAnswer
     except JSONDecodeError as error:
         raise BadRequestError(
             "模型返回的 STAR 面试答案不是合法 JSON",
-            details={"raw_answer": raw_answer[:500]},
+            details={"response_length": len(raw_answer)},
         ) from error
     try:
         return StarInterviewAnswerResponse(**data)
@@ -542,6 +570,11 @@ def generate_star_interview_answer(request: StarInterviewAnswerRequest) -> StarI
     if not request.question.strip():
         raise BadRequestError("面试问题不能为空")
 
+    ensure_safe_model_input(
+        request.resume_text,
+        request.job_description,
+        request.question,
+    )
     messages = build_star_interview_answer_messages(request)
     raw_answer = chat_completion(messages)
 
@@ -578,11 +611,9 @@ def build_job_delivery_package_messages(request: JobDeliveryPackageRequest) -> l
 
     user_prompt = dedent(
         f"""
-        简历内容：
-        {request.resume_text.strip()}
+        {wrap_untrusted_data("resume", request.resume_text)}
 
-        岗位 JD：
-        {request.job_description.strip()}
+        {wrap_untrusted_data("job_description", request.job_description)}
         """
     ).strip()
 
@@ -599,7 +630,7 @@ def parse_job_delivery_package_response(raw_answer: str) -> JobDeliveryPackageRe
     except JSONDecodeError as error:
         raise BadRequestError(
             "模型返回的求职成品包不是合法 JSON",
-            details={"raw_answer": raw_answer[:500]},
+            details={"response_length": len(raw_answer)},
         ) from error
     try:
         return JobDeliveryPackageResponse(**data)
@@ -617,6 +648,7 @@ def generate_job_delivery_package(request: JobDeliveryPackageRequest) -> JobDeli
     if not request.job_description.strip():
         raise BadRequestError("岗位 JD 不能为空")
 
+    ensure_safe_model_input(request.resume_text, request.job_description)
     messages = build_job_delivery_package_messages(request)
     raw_answer = chat_completion(messages)
 

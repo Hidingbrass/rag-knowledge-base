@@ -24,6 +24,21 @@ public record FastApiJobDeliveryPackageResponse(
         String closingStatement,
 
         @JsonProperty("rehearsal_checklist")
-        List<String> rehearsalChecklist
-) {
+        List<String> rehearsalChecklist,
+
+        @JsonProperty("model_usage")
+        FastApiModelUsage modelUsage
+) implements FastApiUsageCarrier {
+    public FastApiJobDeliveryPackageResponse(
+            String targetPosition,
+            String selfIntroduction,
+            String projectPitch,
+            List<String> architectureTalkingPoints,
+            List<String> riskResponse,
+            String closingStatement,
+            List<String> rehearsalChecklist
+    ) {
+        this(targetPosition, selfIntroduction, projectPitch, architectureTalkingPoints,
+                riskResponse, closingStatement, rehearsalChecklist, null);
+    }
 }

@@ -1,13 +1,29 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+from app.core.config import settings
+
+
+class ModelUsageSummary(BaseModel):
+    models: list[str] = Field(default_factory=list)
+    upstream_call_count: int = 0
+    retry_count: int = 0
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+    estimated_cost_yuan: float = 0.0
+
+
+class ModelResponse(BaseModel):
+    model_usage: ModelUsageSummary | None = None
 
 
 class JobAnalyzeRequest(BaseModel):
-    resume_text: str
-    job_description: str
+    resume_text: str = Field(max_length=settings.max_job_text_chars)
+    job_description: str = Field(max_length=settings.max_job_text_chars)
 
 
-class JobAnalyzeResponse(BaseModel):
-    match_score: int
+class JobAnalyzeResponse(ModelResponse):
+    match_score: int = Field(ge=0, le=100)
     matched_skills: list[str]
     missing_skills: list[str]
     strengths: list[str]
@@ -17,7 +33,7 @@ class JobAnalyzeResponse(BaseModel):
 
 
 class ResumeParseRequest(BaseModel):
-    resume_text: str
+    resume_text: str = Field(max_length=settings.max_job_text_chars)
 
 
 class ResumeProject(BaseModel):
@@ -28,7 +44,7 @@ class ResumeProject(BaseModel):
     highlights: list[str]
 
 
-class ResumeParseResponse(BaseModel):
+class ResumeParseResponse(ModelResponse):
     target_roles: list[str]
     skills: list[str]
     projects: list[ResumeProject]
@@ -40,10 +56,10 @@ class ResumeParseResponse(BaseModel):
 
 
 class JdParseRequest(BaseModel):
-    job_description: str
+    job_description: str = Field(max_length=settings.max_job_text_chars)
 
 
-class JdParseResponse(BaseModel):
+class JdParseResponse(ModelResponse):
     job_title: str
     seniority: str
     required_skills: list[str]
@@ -62,8 +78,8 @@ class JobAttachmentTextResponse(BaseModel):
 
 
 class ResumeOptimizeRequest(BaseModel):
-    resume_text: str
-    job_description: str
+    resume_text: str = Field(max_length=settings.max_job_text_chars)
+    job_description: str = Field(default="", max_length=settings.max_job_text_chars)
 
 
 class ResumeRewriteSuggestion(BaseModel):
@@ -75,7 +91,7 @@ class ResumeRewriteSuggestion(BaseModel):
     keywords_added: list[str]
 
 
-class ResumeOptimizeResponse(BaseModel):
+class ResumeOptimizeResponse(ModelResponse):
     summary: str
     target_position: str
     gap_summary: list[str]
@@ -85,8 +101,8 @@ class ResumeOptimizeResponse(BaseModel):
 
 
 class InterviewPrepRequest(BaseModel):
-    resume_text: str
-    job_description: str
+    resume_text: str = Field(max_length=settings.max_job_text_chars)
+    job_description: str = Field(max_length=settings.max_job_text_chars)
 
 
 class InterviewQuestionAnswer(BaseModel):
@@ -101,7 +117,7 @@ class ProjectTalkingPoint(BaseModel):
     likely_followups: list[str]
 
 
-class InterviewPrepResponse(BaseModel):
+class InterviewPrepResponse(ModelResponse):
     target_position: str
     self_introduction: str
     project_talking_points: list[ProjectTalkingPoint]
@@ -112,12 +128,12 @@ class InterviewPrepResponse(BaseModel):
 
 
 class StarInterviewAnswerRequest(BaseModel):
-    resume_text: str
-    job_description: str
-    question: str
+    resume_text: str = Field(max_length=settings.max_job_text_chars)
+    job_description: str = Field(max_length=settings.max_job_text_chars)
+    question: str = Field(max_length=settings.max_question_chars)
 
 
-class StarInterviewAnswerResponse(BaseModel):
+class StarInterviewAnswerResponse(ModelResponse):
     target_position: str
     question: str
     situation: str
@@ -130,11 +146,11 @@ class StarInterviewAnswerResponse(BaseModel):
 
 
 class JobDeliveryPackageRequest(BaseModel):
-    resume_text: str
-    job_description: str
+    resume_text: str = Field(max_length=settings.max_job_text_chars)
+    job_description: str = Field(max_length=settings.max_job_text_chars)
 
 
-class JobDeliveryPackageResponse(BaseModel):
+class JobDeliveryPackageResponse(ModelResponse):
     target_position: str
     self_introduction: str
     project_pitch: str

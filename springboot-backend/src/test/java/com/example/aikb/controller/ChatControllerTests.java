@@ -59,8 +59,8 @@ class ChatControllerTests {
     /**
      * 创建一个属于 user-1 / dev 的会话。
      *
-     * 后续测试会让 user-3 / qa 访问这个会话，
-     * 用来证明跨部门且非 owner 的用户会被拒绝。
+     * 后续测试会让同为 dev 学习方向的 user-2 访问这个会话，
+     * 用来证明个人知识库不会因为学习方向相同而共享。
      */
     private ChatSession createDevSession() {
         KnowledgeBase knowledgeBase = knowledgeBaseService.create(new CreateKnowledgeBaseRequest(
@@ -95,7 +95,7 @@ class ChatControllerTests {
     }
 
     @Test
-    void createSessionShouldReturnForbiddenWhenUserHasNoAccessToKnowledgeBase() throws Exception {
+    void createSessionShouldReturnForbiddenForSameDepartmentNonOwner() throws Exception {
         KnowledgeBase knowledgeBase = knowledgeBaseService.create(new CreateKnowledgeBaseRequest(
                 "Research Knowledge Base",
                 "Used by chat controller permission tests",
@@ -108,8 +108,8 @@ class ChatControllerTests {
                         .content("""
                                 {
                                   "knowledgeBaseId": "%s",
-                                  "userId": "user-3",
-                                  "department": "qa",
+                                  "userId": "user-2",
+                                  "department": "dev",
                                   "title": "Unauthorized session"
                                 }
                                 """.formatted(knowledgeBase.id())))
@@ -153,24 +153,24 @@ class ChatControllerTests {
     }
 
     @Test
-    void listMessagesShouldReturnForbiddenWhenUserHasNoAccess() throws Exception {
+    void listMessagesShouldReturnForbiddenForSameDepartmentNonOwner() throws Exception {
         ChatSession session = createDevSession();
 
         mockMvc.perform(get("/api/chat/sessions/{sessionId}/messages", session.id())
-                        .param("userId", "user-3")
-                        .param("department", "qa"))
+                        .param("userId", "user-2")
+                        .param("department", "dev"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.message").value("无权访问知识库: " + session.knowledgeBaseId()));
     }
 
     @Test
-    void askShouldReturnForbiddenBeforeCallingFastApiWhenUserHasNoAccess() throws Exception {
+    void askShouldReturnForbiddenForSameDepartmentNonOwnerBeforeCallingFastApi() throws Exception {
         ChatSession session = createDevSession();
 
         mockMvc.perform(post("/api/chat/sessions/{sessionId}/ask", session.id())
-                        .param("userId", "user-3")
-                        .param("department", "qa")
+                        .param("userId", "user-2")
+                        .param("department", "dev")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {

@@ -15,14 +15,16 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import java.util.UUID;
 
 /**
  * 文档业务服务。
  * <p>
- * Spring Boot 不直接做 PDF 解析、切分和向量入库，而是负责编排业务流程：
+ * Spring Boot 不直接做文档解析、切分和向量入库，而是负责编排业务流程：
  * 1. 校验当前用户能访问目标知识库；
- * 2. 校验上传文件是不是 PDF；
+ * 2. 校验上传文件是不是支持的学习资料格式；
  * 3. 计算文件 SHA-256，用于重复上传检测；
  * 4. 没有重复时，创建本地 PROCESSING 文档记录；
  * 5. 调用 FastAPI /documents/index；
@@ -30,6 +32,10 @@ import java.util.UUID;
  */
 @Service
 public class DocumentService {
+
+    private static final Set<String> SUPPORTED_EXTENSIONS = Set.of(
+            ".pdf", ".md", ".markdown", ".docx", ".txt"
+    );
 
     private final KnowledgeBaseService knowledgeBaseService;
     private final KnowledgeDocumentRepository documentRepository;
@@ -52,11 +58,11 @@ public class DocumentService {
     }
 
     /**
-     * 上传 PDF 并触发 FastAPI 入库。
+     * 上传学习资料并触发 FastAPI 入库。
      * <p>
      * 重要边界：
      * - 权限判断和重复检测在 Spring Boot 做，因为它们依赖 MySQL 业务数据；
-     * - PDF 解析、切分、Embedding 和 Qdrant 写入在 FastAPI 做，因为它们属于 AI 能力；
+     * - 文档解析、切分、Embedding 和 Qdrant 写入在 FastAPI 做，因为它们属于 AI 能力；
      * - 入库失败时保留 FAILED 记录，方便前端展示失败原因，也方便后续排查。
      */
     public DocumentIndexResult indexDocument(UUID knowledgeBaseId,
@@ -64,7 +70,7 @@ public class DocumentService {
                                              String department,
                                              MultipartFile file) {
         knowledgeBaseService.getRequiredWithAccess(knowledgeBaseId, userId, department);
-        validatePdf(file);
+        validateDocument(file);
 
         String fileHash = calculateSha256(file);
         KnowledgeDocument duplicatedDocument = findDuplicatedDocument(knowledgeBaseId, fileHash);
@@ -138,7 +144,7 @@ public class DocumentService {
     }
 
     /**
-     * 在同一个知识库内查找重复 PDF。
+     * 在同一个知识库内查找重复资料。
      * <p>
      * 只把 PROCESSING / AVAILABLE 当作可复用文档：
      * - PROCESSING：避免同一个文件被并发重复提交；
@@ -159,7 +165,7 @@ public class DocumentService {
      * 计算文件内容 SHA-256。
      *
      * 用内容 hash 判断重复，比只看文件名可靠：
-     * 同一个 PDF 改名后上传，仍然能被识别为重复文件。
+     * 同一份资料改名后上传，仍然能被识别为重复文件。
      */
     private String calculateSha256(MultipartFile file) {
         try {
@@ -174,21 +180,19 @@ public class DocumentService {
     }
 
     /**
-     * 做最基础的 PDF 校验。
-     *
-     * 这里同时看文件名后缀和 contentType，是为了兼容不同客户端上传文件时的差异。
+     * 基于文件名扩展名做上传白名单校验。
+     * 实际内容能否解析由 FastAPI 再做一次严格校验，避免把解析能力重复放在业务层。
      */
-    private void validatePdf(MultipartFile file) {
+    private void validateDocument(MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new BusinessException("上传文件不能为空");
         }
 
         String filename = file.getOriginalFilename();
-        boolean filenameLooksLikePdf = filename != null && filename.toLowerCase().endsWith(".pdf");
-        boolean contentTypeLooksLikePdf = "application/pdf".equalsIgnoreCase(file.getContentType());
-
-        if (!filenameLooksLikePdf && !contentTypeLooksLikePdf) {
-            throw new BusinessException("目前只支持 PDF 文件");
+        String normalizedFilename = filename == null ? "" : filename.toLowerCase(Locale.ROOT);
+        boolean supported = SUPPORTED_EXTENSIONS.stream().anyMatch(normalizedFilename::endsWith);
+        if (!supported) {
+            throw new BusinessException("支持 PDF、Markdown、Word（DOCX）和 TXT 文件");
         }
     }
 }

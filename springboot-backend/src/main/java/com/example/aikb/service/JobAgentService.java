@@ -13,11 +13,13 @@ import com.example.aikb.dto.fastapi.FastApiStarInterviewAnswerResponse;
 import com.example.aikb.dto.job.InterviewPrepRequest;
 import com.example.aikb.dto.job.JdParseRequest;
 import com.example.aikb.dto.job.JobAnalysisTaskResponse;
+import com.example.aikb.dto.job.JobAnalyzeFromFileResponse;
 import com.example.aikb.dto.job.JobAnalyzeRequest;
 import com.example.aikb.dto.job.JobDeliveryPackageRequest;
 import com.example.aikb.dto.job.JobFavoriteRequest;
 import com.example.aikb.dto.job.JobFavoriteResponse;
 import com.example.aikb.dto.job.JobGeneratedTaskResponse;
+import com.example.aikb.dto.job.JobGeneratedTaskReviewRequest;
 import com.example.aikb.dto.job.JobResumeVersionRequest;
 import com.example.aikb.dto.job.JobResumeVersionResponse;
 import com.example.aikb.dto.job.JobTaskCompareItem;
@@ -30,6 +32,7 @@ import com.example.aikb.entity.JobAnalysisTask;
 import com.example.aikb.entity.JobFavorite;
 import com.example.aikb.entity.JobGeneratedTask;
 import com.example.aikb.entity.JobGeneratedTaskType;
+import com.example.aikb.entity.JobReviewStatus;
 import com.example.aikb.entity.JobResumeVersion;
 import com.example.aikb.entity.JobTaskStatus;
 import com.example.aikb.exception.BusinessException;
@@ -113,7 +116,7 @@ public class JobAgentService {
         return response;
     }
 
-    public FastApiJobAnalyzeResponse analyzeFromFile(String userId, String resumeText, MultipartFile file) {
+    public JobAnalyzeFromFileResponse analyzeFromFile(String userId, String resumeText, MultipartFile file) {
         String requiredUserId = requireUserId(userId);
         if (resumeText == null || resumeText.isBlank()) {
             throw new BusinessException("简历内容不能为空");
@@ -140,7 +143,13 @@ public class JobAgentService {
                 Instant.now()
         );
         jobAnalysisTaskRepository.save(task);
-        return response;
+        return new JobAnalyzeFromFileResponse(
+                response,
+                extracted.text(),
+                extracted.filename(),
+                extracted.sourceType(),
+                extracted.warnings()
+        );
     }
 
     private String toResultJson(Object response) {
@@ -282,16 +291,17 @@ public class JobAgentService {
 
     public FastApiResumeOptimizeResponse optimizeResume(ResumeOptimizeRequest request) {
         String userId = requireUserId(request.userId());
+        String jobDescription = request.jobDescription() == null ? "" : request.jobDescription();
         aiRateLimitService.checkAiCallAllowed(userId, "RESUME_OPTIMIZE");
         FastApiResumeOptimizeResponse response = fastApiRagClient.optimizeResume(
                 request.resumeText(),
-                request.jobDescription()
+                jobDescription
         );
         saveGeneratedTask(
                 userId,
                 JobGeneratedTaskType.RESUME_OPTIMIZE,
                 request.resumeText(),
-                request.jobDescription(),
+                jobDescription,
                 response
         );
         return response;
@@ -394,6 +404,18 @@ public class JobAgentService {
         jobGeneratedTaskRepository.delete(task);
     }
 
+    public JobGeneratedTaskResponse reviewGeneratedTask(
+            UUID taskId,
+            JobGeneratedTaskReviewRequest request
+    ) {
+        JobGeneratedTask task = getOwnedGeneratedTask(taskId, request.userId());
+        if (request.status() == JobReviewStatus.PENDING_REVIEW) {
+            throw new BusinessException("审核结果只能是通过或驳回");
+        }
+        task.review(request.status(), request.comment(), Instant.now());
+        return toGeneratedTaskResponse(jobGeneratedTaskRepository.save(task));
+    }
+
     private JobGeneratedTask getOwnedGeneratedTask(UUID taskId, String userId) {
         String requiredUserId = requireUserId(userId);
         JobGeneratedTask task = jobGeneratedTaskRepository.findById(taskId)
@@ -412,6 +434,9 @@ public class JobAgentService {
                 task.taskType(),
                 task.status(),
                 task.errorMessage(),
+                task.reviewStatus(),
+                task.reviewComment(),
+                task.reviewedAt(),
                 task.resumeText(),
                 task.jobDescription(),
                 task.resultJson(),

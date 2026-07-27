@@ -18,10 +18,28 @@ public record FastApiRagResponse(
         @JsonProperty("retrieval_mode")
         String retrievalMode,
 
+        @JsonProperty("candidate_retrieval_mode")
+        String candidateRetrievalMode,
+
         @JsonProperty("rerank_error")
         String rerankError,
 
         @JsonProperty("rerank_elapsed_seconds")
-        Double rerankElapsedSeconds
-) {
+        Double rerankElapsedSeconds,
+
+        @JsonProperty("model_usage")
+        FastApiModelUsage modelUsage
+) implements FastApiUsageCarrier {
+    public FastApiRagResponse(
+            String question,
+            String answer,
+            List<FastApiSource> sources,
+            String retrievalMode,
+            String candidateRetrievalMode,
+            String rerankError,
+            Double rerankElapsedSeconds
+    ) {
+        this(question, answer, sources, retrievalMode, candidateRetrievalMode,
+                rerankError, rerankElapsedSeconds, null);
+    }
 }

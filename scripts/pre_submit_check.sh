@@ -22,6 +22,10 @@ if git grep -n "DASHSCOPE_API_KEY=.*[A-Za-z0-9_-]\{20,\}" -- . ':!.env.example' 
   echo "Potential real DASHSCOPE_API_KEY found in tracked files."
   exit 1
 fi
+if git grep -n "FASTAPI_API_KEY=.*[A-Za-z0-9_-]\{20,\}" -- . ':!.env.example' ':!docs' ':!README.md'; then
+  echo "Potential real FASTAPI_API_KEY found in tracked files."
+  exit 1
+fi
 
 echo "==> Checking whitespace"
 git diff --check
@@ -30,7 +34,15 @@ echo "==> Checking Markdown links"
 "$PYTHON_BIN" scripts/check_markdown_links.py
 
 echo "==> Checking Docker Compose config"
-docker compose config --quiet
+FASTAPI_API_KEY=compose-check docker compose config --quiet
+
+echo "==> Installing and testing Vue frontend"
+(
+  cd "$ROOT_DIR/springboot-backend/frontend"
+  npm ci --prefer-offline
+  npm test -- --run
+  npm run build
+)
 
 echo "==> Running FastAPI tests"
 "$PYTHON_BIN" -m pytest -q

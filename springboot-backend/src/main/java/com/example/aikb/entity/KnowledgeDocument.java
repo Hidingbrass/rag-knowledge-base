@@ -16,7 +16,7 @@ import java.util.UUID;
  * 文档数据库实体。
  *
  * 这张表保存 Spring Boot 侧的文档业务记录。
- * PDF 的解析、切分、向量入库仍然由 FastAPI 完成；Spring Boot 只记录业务状态和 FastAPI 返回的 document_id。
+ * 文档解析、切分、向量入库仍然由 FastAPI 完成；Spring Boot 只记录业务状态和 FastAPI 返回的 document_id。
  *
  * 两个 ID 的区别：
  * - id：Spring Boot/MySQL 里的文档主键，用于业务管理、列表展示、状态流转。

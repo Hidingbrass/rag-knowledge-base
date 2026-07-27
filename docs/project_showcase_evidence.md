@@ -38,16 +38,18 @@ make pre-submit
 3. Git diff 是否存在空白错误
 4. README 和 docs 的本地 Markdown 链接是否有效
 5. docker compose config 是否可解析
-6. FastAPI pytest 是否通过
-7. Spring Boot Maven test 是否通过
+6. Vue3 Vitest 和 Vite build 是否通过
+7. FastAPI pytest 是否通过
+8. Spring Boot Maven test 是否通过
 ```
 
 当前已验证结果：
 
 ```text
 Markdown local links passed
-FastAPI pytest：96 passed
-Spring Boot Maven test：57 passed
+Vue3 Vitest：4 passed
+FastAPI pytest：128 passed
+Spring Boot Maven test：102 passed
 Pre-submit checks passed
 ```
 
@@ -66,7 +68,7 @@ GitHub Actions CI：
 
 ```text
 1. 创建知识库
-2. 上传 PDF
+2. 上传 PDF、Markdown、DOCX 或 TXT
 3. 文档状态流转到 AVAILABLE
 4. 创建聊天会话
 5. 指定文档提问
@@ -74,6 +76,7 @@ GitHub Actions CI：
 7. 无相关资料时拒答
 8. 切换用户身份验证权限边界
 9. 刷新页面后从 MySQL 恢复会话和消息
+10. 编辑资料库和个人资料，并安全删除资料库关联数据
 ```
 
 求职辅助 Agent 可展示能力：
@@ -136,9 +139,8 @@ make docker-up
 ```text
 Vue3 企业工作台: http://127.0.0.1:8080/index.html
 Spring Boot 健康检查: http://127.0.0.1:8080/api/health
-FastAPI Swagger: http://127.0.0.1:8000/docs
-FastAPI 健康检查: http://127.0.0.1:8000/health
-Qdrant 检查: http://127.0.0.1:8000/qdrant/health
+FastAPI: 仅 Compose 内网访问，由 Spring Boot 携带 X-API-Key 调用
+Qdrant 控制台: http://127.0.0.1:6333/dashboard
 ```
 
 也可以直接执行：
@@ -176,6 +178,10 @@ docs/pre_submit_checklist.md：提交前检查清单
 
 ```text
 项目支持本地完整演示、Docker Compose 一键启动、GitHub Actions 自动回归、MySQL 持久化、Qdrant 向量检索、RAG 评测和求职 Agent 工作流。
+
+企业知识库主演示不再依赖单份测试文稿：仓库内置 6 份基于真实代码整理的技术 PDF 和 26 条 gold document 评测题，可复现比较 Vector、Sparse、Hybrid RRF 与 Hybrid RRF + Rerank。
+
+2026-07-16 已使用真实 DashScope 与 Qdrant 完成在线消融：6 份 PDF 共 40 个 Chunk，Vector、Sparse、Hybrid 的 Hit@6 和 Hybrid + Rerank 的 Hit@3 均为 1.0；MRR 分别为 0.95、0.8792、0.925、0.975。实验先记录了跨文档 gold recall 降为 0.5 的失败案例，再用候选排名 + 精排排名的文档级 RRF 将其修复为 1.0，保留了完整的失败、诊断、修改和复测证据。
 ```
 
 不要夸大为：
@@ -190,5 +196,5 @@ docs/pre_submit_checklist.md：提交前检查清单
 如果被追问生产化方向，可以回答：
 
 ```text
-当前版本重点是学习、简历展示和工程闭环。生产化下一步会补 Spring Security/JWT、异步任务队列、对象存储、限流、监控告警、链路追踪和云服务器部署。
+当前版本重点是学习、简历展示和工程闭环。已经完成 Spring Security/JWT、Redis 限流、AI 调用成功率/P95/Token/成本聚合、受控重试与单进程熔断；生产化下一步会补异步任务队列、对象存储、OpenTelemetry 链路追踪和云服务器部署。
 ```

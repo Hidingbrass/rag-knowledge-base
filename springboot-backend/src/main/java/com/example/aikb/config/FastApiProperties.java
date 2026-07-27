@@ -19,6 +19,6 @@ public record FastApiProperties(
         int defaultRerankTopK,
         double defaultRerankMinScore,
         String defaultRetrievalMode,
-        int defaultKeywordLimit
+        int defaultSparseLimit
 ) {
 }

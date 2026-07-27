@@ -12,10 +12,12 @@ public record AuthRegisterRequest(
         @Size(min = 6, max = 100, message = "密码长度必须在 6 到 100 之间")
         String password,
 
-        @NotBlank(message = "显示名称不能为空")
+        @NotBlank(message = "昵称不能为空")
+        @Size(max = 100, message = "昵称不能超过 100 个字符")
         String displayName,
 
-        @NotBlank(message = "部门不能为空")
+        @NotBlank(message = "学习方向不能为空")
+        @Size(max = 100, message = "学习方向不能超过 100 个字符")
         String department
 ) {
 }

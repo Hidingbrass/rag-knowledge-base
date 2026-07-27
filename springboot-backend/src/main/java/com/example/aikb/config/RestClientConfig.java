@@ -28,11 +28,14 @@ public class RestClientConfig {
                 .requestFactory(ClientHttpRequestFactories.get(settings));
 
         // 如果配置了 FastAPI API Key，在所有请求中自动携带 X-API-Key 头。
-        String apiKey = properties.apiKey();
+        applyInternalApiKey(builder, properties.apiKey());
+
+        return builder.build();
+    }
+
+    void applyInternalApiKey(RestClient.Builder builder, String apiKey) {
         if (apiKey != null && !apiKey.isBlank()) {
             builder.defaultHeader("X-API-Key", apiKey);
         }
-
-        return builder.build();
     }
 }

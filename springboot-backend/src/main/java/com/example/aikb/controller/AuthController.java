@@ -5,11 +5,13 @@ import com.example.aikb.dto.auth.AuthLoginRequest;
 import com.example.aikb.dto.auth.AuthRegisterRequest;
 import com.example.aikb.dto.auth.AuthResponse;
 import com.example.aikb.dto.auth.AuthUserResponse;
+import com.example.aikb.dto.auth.UpdateProfileRequest;
 import com.example.aikb.security.AuthenticatedUser;
 import com.example.aikb.service.AuthService;
 import jakarta.validation.Valid;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -37,6 +39,14 @@ public class AuthController {
 
     @GetMapping("/me")
     public ApiResponse<AuthUserResponse> me(@AuthenticationPrincipal AuthenticatedUser currentUser) {
-        return ApiResponse.ok(AuthUserResponse.from(currentUser));
+        return ApiResponse.ok(authService.getCurrentUser(currentUser.id()));
+    }
+
+    @PatchMapping("/me")
+    public ApiResponse<AuthResponse> updateProfile(
+            @AuthenticationPrincipal AuthenticatedUser currentUser,
+            @Valid @RequestBody UpdateProfileRequest request
+    ) {
+        return ApiResponse.ok(authService.updateProfile(currentUser.id(), request));
     }
 }

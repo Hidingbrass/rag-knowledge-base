@@ -7,16 +7,29 @@
 - RAG、文档管理、评测脚本可以复用同一套检索和文档操作函数。
 - 后续如果更换 collection 名称、向量维度或 Qdrant 地址，只需要优先检查这里。
 """
-import re
 from uuid import uuid4
 
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, VectorParams
-from qdrant_client.models import Filter, FieldCondition, MatchValue, FilterSelector, PointStruct
+from qdrant_client.models import (
+    Distance,
+    FieldCondition,
+    Filter,
+    FilterSelector,
+    Fusion,
+    FusionQuery,
+    MatchValue,
+    Modifier,
+    PointStruct,
+    Prefetch,
+    SparseVector,
+    SparseVectorParams,
+    VectorParams,
+)
 
 from app.core.config import settings
 from app.core.logging import get_logger
 from app.services.qwen_service import create_embedding
+from app.services.sparse_embedding_service import encode_sparse_text
 
 logger = get_logger(__name__)
 
@@ -27,6 +40,40 @@ qdrant_client = QdrantClient(url=settings.qdrant_url)
 # COLLECTION_NAME 是保存 RAG 文本片段向量的集合名。
 # 通过配置管理后，测试环境和正式环境可以使用不同 collection。
 COLLECTION_NAME = settings.qdrant_collection_name
+DENSE_VECTOR_NAME = settings.qdrant_dense_vector_name
+SPARSE_VECTOR_NAME = settings.qdrant_sparse_vector_name
+
+
+def _hybrid_collection_config() -> dict:
+    return {
+        "vectors_config": {
+            DENSE_VECTOR_NAME: VectorParams(
+                size=settings.embedding_dimensions,
+                distance=Distance.COSINE,
+            )
+        },
+        "sparse_vectors_config": {
+            SPARSE_VECTOR_NAME: SparseVectorParams(modifier=Modifier.IDF)
+        },
+    }
+
+
+def _validate_collection_schema() -> None:
+    """Fail early when an old dense-only collection uses the configured name."""
+    collection = qdrant_client.get_collection(collection_name=COLLECTION_NAME)
+    vectors = collection.config.params.vectors
+    sparse_vectors = collection.config.params.sparse_vectors or {}
+
+    if not isinstance(vectors, dict):
+        raise RuntimeError(
+            f"Qdrant collection {COLLECTION_NAME} 仍是旧版单向量结构，"
+            "请切换到新的 QDRANT_COLLECTION_NAME 或重建该 collection"
+        )
+    if DENSE_VECTOR_NAME not in vectors or SPARSE_VECTOR_NAME not in sparse_vectors:
+        raise RuntimeError(
+            f"Qdrant collection {COLLECTION_NAME} 缺少 dense/sparse 命名向量，"
+            "请重建该 collection 后重新上传文档"
+        )
 
 
 def ensure_collection():
@@ -47,12 +94,12 @@ def ensure_collection():
         )
         qdrant_client.create_collection(
             collection_name=COLLECTION_NAME,
-            vectors_config=VectorParams(
-                size=settings.embedding_dimensions,
-                distance=Distance.COSINE,
-            ),
+            **_hybrid_collection_config(),
         )
         logger.info("Qdrant collection 创建完成: collection=%s", COLLECTION_NAME)
+        return
+
+    _validate_collection_schema()
 
 
 def reset_collection():
@@ -72,10 +119,7 @@ def reset_collection():
 
     qdrant_client.create_collection(
         collection_name=COLLECTION_NAME,
-        vectors_config=VectorParams(
-            size=settings.embedding_dimensions,
-            distance=Distance.COSINE,
-        ),
+        **_hybrid_collection_config(),
     )
     logger.info("Qdrant collection 重建完成: collection=%s", COLLECTION_NAME)
 
@@ -98,21 +142,12 @@ def search_chunks(question: str, top_k: int, document_id: str | None = None):
     """
     question_vector = create_embedding(question)
 
-    query_filter = None
-
-    if document_id is not None:
-        query_filter = Filter(
-            must=[
-                FieldCondition(
-                    key="document_id",
-                    match=MatchValue(value=document_id),
-                )
-            ]
-        )
+    query_filter = _document_filter(document_id)
 
     response = qdrant_client.query_points(
         collection_name=COLLECTION_NAME,
         query=question_vector,
+        using=DENSE_VECTOR_NAME,
         limit=top_k,
         query_filter=query_filter,
     )
@@ -124,21 +159,31 @@ def search_chunks(question: str, top_k: int, document_id: str | None = None):
         len(response.points),
     )
 
-    sources = []
+    return [_source_from_point(result, "vector_score") for result in response.points]
 
-    for result in response.points:
-        sources.append(
-            {
-                "document_id": result.payload.get("document_id"),
-                "vector_score": round(result.score, 4),
-                "text": result.payload.get("text"),
-                "filename": result.payload.get("filename"),
-                "chunk_index": result.payload.get("chunk_index"),
-                "page_number": result.payload.get("page_number"),
-            }
-        )
 
-    return sources
+def _document_filter(document_id: str | None) -> Filter | None:
+    if document_id is None:
+        return None
+    return Filter(
+        must=[
+            FieldCondition(
+                key="document_id",
+                match=MatchValue(value=document_id),
+            )
+        ]
+    )
+
+
+def _source_from_point(point, score_field: str) -> dict:
+    return {
+        "document_id": point.payload.get("document_id"),
+        score_field: round(point.score, 4),
+        "text": point.payload.get("text"),
+        "filename": point.payload.get("filename"),
+        "chunk_index": point.payload.get("chunk_index"),
+        "page_number": point.payload.get("page_number"),
+    }
 
 
 def find_document_by_hash(file_hash: str):
@@ -273,10 +318,17 @@ def upsert_document_chunks(
 
     for index, (chunk, vector) in enumerate(zip(chunks, vectors)):
         point_id = str(uuid4())
+        sparse_vector = encode_sparse_text(chunk["text"])
         points.append(
             PointStruct(
                 id=point_id,
-                vector=vector,
+                vector={
+                    DENSE_VECTOR_NAME: vector,
+                    SPARSE_VECTOR_NAME: SparseVector(
+                        indices=sparse_vector.indices,
+                        values=sparse_vector.values,
+                    ),
+                },
                 payload={
                     "document_id": document_id,
                     "text": chunk["text"],
@@ -302,86 +354,67 @@ def upsert_document_chunks(
     return document_id
 
 
-def extract_keywords(question):
-    keywords = re.findall(r"[\u4e00-\u9fff]+|[a-zA-Z0-9_]+", question)
+def sparse_search_chunks(question: str, limit: int = 5, document_id: str | None = None):
+    """Retrieve lexical candidates from Qdrant's sparse inverted index."""
+    encoded = encode_sparse_text(question)
+    if not encoded.indices:
+        return []
+
+    response = qdrant_client.query_points(
+        collection_name=COLLECTION_NAME,
+        query=SparseVector(indices=encoded.indices, values=encoded.values),
+        using=SPARSE_VECTOR_NAME,
+        query_filter=_document_filter(document_id),
+        limit=limit,
+        with_payload=True,
+    )
     return [
-        keyword
-        for keyword in keywords
-        if len(keyword) >= 2
+        _source_from_point(point, "sparse_score")
+        for point in response.points[:limit]
     ]
 
 
-def keyword_search_chunks(question, limit=5, document_id=None):
-    keywords = extract_keywords(question)
-    scroll_filter = None
+def hybrid_search_chunks(question, candidate_k=6, sparse_limit=6, document_id=None):
+    """Fuse dense and sparse candidates inside Qdrant using reciprocal-rank fusion."""
+    dense_query = create_embedding(question)
+    sparse_query = encode_sparse_text(question)
+    query_filter = _document_filter(document_id)
 
-    if document_id is not None:
-        scroll_filter = Filter(
-            must=[
-                FieldCondition(
-                    key="document_id",
-                    match=MatchValue(value=document_id),
-                )
-            ]
+    prefetch = [
+        Prefetch(
+            query=dense_query,
+            using=DENSE_VECTOR_NAME,
+            filter=query_filter,
+            limit=candidate_k,
         )
-    points, _ = qdrant_client.scroll(
+    ]
+    if sparse_query.indices:
+        prefetch.append(
+            Prefetch(
+                query=SparseVector(
+                    indices=sparse_query.indices,
+                    values=sparse_query.values,
+                ),
+                using=SPARSE_VECTOR_NAME,
+                filter=query_filter,
+                limit=sparse_limit,
+            )
+        )
+
+    response = qdrant_client.query_points(
         collection_name=COLLECTION_NAME,
-        scroll_filter=scroll_filter,
-        limit=1000,
+        prefetch=prefetch,
+        query=FusionQuery(fusion=Fusion.RRF),
+        limit=max(candidate_k, sparse_limit),
         with_payload=True,
-        with_vectors=False,
     )
-    matched_sources = []
-    for point in points:
-        payload = point.payload
-        text = payload.get("text", "")
-
-        keyword_score = 0
-
-        for keyword in keywords:
-            if keyword.lower() in text.lower():
-                keyword_score += 1
-
-        if keyword_score > 0:
-            source = {
-                "document_id": payload["document_id"],
-                "text": text,
-                "filename": payload["filename"],
-                "chunk_index": payload["chunk_index"],
-                "page_number": payload["page_number"],
-                "keyword_score": keyword_score,
-            }
-
-            matched_sources.append(source)
-
-    matched_sources.sort(
-        key=lambda source: source["keyword_score"],
-        reverse=True,
+    logger.info(
+        "Qdrant Hybrid RRF 检索完成: collection=%s dense_limit=%s sparse_limit=%s "
+        "document_id=%s result_count=%s",
+        COLLECTION_NAME,
+        candidate_k,
+        sparse_limit,
+        document_id,
+        len(response.points),
     )
-
-    return matched_sources[:limit]
-
-
-def build_source_key(source):
-    return source["document_id"], source["chunk_index"]
-
-
-def hybrid_search_chunks(question, candidate_k=6, keyword_limit=6, document_id=None):
-    vector_sources = search_chunks(question, candidate_k, document_id)
-    keyword_sources = keyword_search_chunks(question, keyword_limit, document_id)
-
-    merged_sources = {}
-
-    for source in vector_sources:
-        source_key = build_source_key(source)
-        merged_sources[source_key] = source
-
-    for source in keyword_sources:
-        source_key = build_source_key(source)
-
-        if source_key in merged_sources:
-            merged_sources[source_key]["keyword_score"] = source["keyword_score"]
-        else:
-            merged_sources[source_key] = source
-
-    return list(merged_sources.values())
+    return [_source_from_point(point, "fusion_score") for point in response.points]

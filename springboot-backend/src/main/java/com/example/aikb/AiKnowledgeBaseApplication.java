@@ -1,6 +1,7 @@
 package com.example.aikb;
 
 import com.example.aikb.config.AiRateLimitProperties;
+import com.example.aikb.config.AuthSecurityProperties;
 import com.example.aikb.config.FastApiProperties;
 import com.example.aikb.config.JwtProperties;
 import com.example.aikb.config.UploadLockProperties;
@@ -15,7 +16,13 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
  * 它负责企业业务层：用户、知识库、文档状态、聊天记录，以及通过 HTTP 调用 FastAPI AI 服务。
  */
 @SpringBootApplication
-@EnableConfigurationProperties({FastApiProperties.class, AiRateLimitProperties.class, JwtProperties.class, UploadLockProperties.class})
+@EnableConfigurationProperties({
+        FastApiProperties.class,
+        AiRateLimitProperties.class,
+        JwtProperties.class,
+        UploadLockProperties.class,
+        AuthSecurityProperties.class
+})
 public class AiKnowledgeBaseApplication {
 
     public static void main(String[] args) {

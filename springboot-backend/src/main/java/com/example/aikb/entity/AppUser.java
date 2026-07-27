@@ -81,4 +81,9 @@ public class AppUser {
     public Instant createdAt() {
         return createdAt;
     }
+
+    public void updateProfile(String displayName, String department) {
+        this.displayName = displayName;
+        this.department = department;
+    }
 }

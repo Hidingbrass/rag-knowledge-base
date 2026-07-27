@@ -67,6 +67,22 @@ def get_float_env(name: str, default: float) -> float:
     return float(value)
 
 
+def get_bool_env(name: str, default: bool) -> bool:
+    """读取布尔环境变量，并拒绝含义不明确的配置值。"""
+    value = os.getenv(name)
+
+    if value is None:
+        return default
+
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+
+    raise ValueError(f"{name} 必须是 true/false、1/0、yes/no 或 on/off")
+
+
 @dataclass(frozen=True)
 class Settings:
     """项目运行配置。
@@ -76,6 +92,7 @@ class Settings:
     - dashscope_base_url：DashScope OpenAI-compatible API 地址。
     - qdrant_url：Qdrant 服务地址。
     - qdrant_collection_name：保存 RAG chunk 的 collection 名称。
+    - qdrant_dense_vector_name / qdrant_sparse_vector_name：Qdrant 命名向量字段。
     - embedding_model：Embedding 模型名称。
     - embedding_dimensions：Embedding 向量维度。
     - chat_model：普通聊天和 RAG 生成使用的模型。
@@ -91,6 +108,8 @@ class Settings:
     dashscope_base_url: str
     qdrant_url: str
     qdrant_collection_name: str
+    qdrant_dense_vector_name: str
+    qdrant_sparse_vector_name: str
     embedding_model: str
     embedding_dimensions: int
     chat_model: str
@@ -101,7 +120,9 @@ class Settings:
     default_top_k: int
     default_min_score: float
     default_candidate_k: int
+    default_sparse_limit: int
     default_rerank_top_k: int
+    rerank_document_diversity_enabled: bool
     default_rerank_min_score: float
     default_fallback_min_score: float
     slow_rerank_threshold: float
@@ -109,6 +130,18 @@ class Settings:
     fastapi_api_key: str
     vision_model: str
     job_ocr_pdf_max_pages: int
+    chat_max_output_tokens: int
+    structured_chat_max_output_tokens: int
+    max_question_chars: int
+    max_job_text_chars: int
+    model_retry_max_attempts: int
+    model_retry_backoff_seconds: float
+    model_circuit_failure_threshold: int
+    model_circuit_reset_seconds: float
+    chat_input_price_per_million_yuan: float
+    chat_output_price_per_million_yuan: float
+    embedding_price_per_million_yuan: float
+    rerank_price_per_million_yuan: float
 
 
 settings = Settings(
@@ -118,7 +151,9 @@ settings = Settings(
         "https://dashscope.aliyuncs.com/compatible-mode/v1",
     ),
     qdrant_url=os.getenv("QDRANT_URL", "http://127.0.0.1:6333"),
-    qdrant_collection_name=os.getenv("QDRANT_COLLECTION_NAME", "rag_chunks"),
+    qdrant_collection_name=os.getenv("QDRANT_COLLECTION_NAME", "rag_chunks_hybrid_v1"),
+    qdrant_dense_vector_name=os.getenv("QDRANT_DENSE_VECTOR_NAME", "dense"),
+    qdrant_sparse_vector_name=os.getenv("QDRANT_SPARSE_VECTOR_NAME", "sparse"),
     embedding_model=os.getenv("QWEN_EMBEDDING_MODEL", "text-embedding-v4"),
     embedding_dimensions=get_int_env("QWEN_EMBEDDING_DIMENSIONS", 1024),
     chat_model=os.getenv("QWEN_CHAT_MODEL", "qwen-plus"),
@@ -132,7 +167,12 @@ settings = Settings(
     default_top_k=get_int_env("RAG_DEFAULT_TOP_K", 3),
     default_min_score=get_float_env("RAG_DEFAULT_MIN_SCORE", 0.55),
     default_candidate_k=get_int_env("RAG_DEFAULT_CANDIDATE_K", 6),
+    default_sparse_limit=get_int_env("RAG_DEFAULT_SPARSE_LIMIT", 6),
     default_rerank_top_k=get_int_env("RAG_DEFAULT_RERANK_TOP_K", 3),
+    rerank_document_diversity_enabled=get_bool_env(
+        "RAG_RERANK_DOCUMENT_DIVERSITY_ENABLED",
+        True,
+    ),
     default_rerank_min_score=get_float_env("RAG_DEFAULT_RERANK_MIN_SCORE", 0.75),
     default_fallback_min_score=get_float_env("RAG_DEFAULT_FALLBACK_MIN_SCORE", 0.55),
     slow_rerank_threshold=get_float_env("RAG_SLOW_RERANK_THRESHOLD", 3.0),
@@ -140,4 +180,31 @@ settings = Settings(
     fastapi_api_key=os.getenv("FASTAPI_API_KEY", ""),
     vision_model=os.getenv("QWEN_VISION_MODEL", "qwen-vl-plus"),
     job_ocr_pdf_max_pages=get_int_env("JOB_OCR_PDF_MAX_PAGES", 3),
+    chat_max_output_tokens=get_int_env("QWEN_CHAT_MAX_OUTPUT_TOKENS", 2048),
+    structured_chat_max_output_tokens=get_int_env(
+        "QWEN_STRUCTURED_MAX_OUTPUT_TOKENS",
+        4096,
+    ),
+    max_question_chars=get_int_env("AI_MAX_QUESTION_CHARS", 2000),
+    max_job_text_chars=get_int_env("AI_MAX_JOB_TEXT_CHARS", 30000),
+    model_retry_max_attempts=get_int_env("MODEL_RETRY_MAX_ATTEMPTS", 3),
+    model_retry_backoff_seconds=get_float_env("MODEL_RETRY_BACKOFF_SECONDS", 0.25),
+    model_circuit_failure_threshold=get_int_env("MODEL_CIRCUIT_FAILURE_THRESHOLD", 5),
+    model_circuit_reset_seconds=get_float_env("MODEL_CIRCUIT_RESET_SECONDS", 30.0),
+    chat_input_price_per_million_yuan=get_float_env(
+        "MODEL_CHAT_INPUT_PRICE_PER_MILLION_YUAN",
+        0.0,
+    ),
+    chat_output_price_per_million_yuan=get_float_env(
+        "MODEL_CHAT_OUTPUT_PRICE_PER_MILLION_YUAN",
+        0.0,
+    ),
+    embedding_price_per_million_yuan=get_float_env(
+        "MODEL_EMBEDDING_PRICE_PER_MILLION_YUAN",
+        0.0,
+    ),
+    rerank_price_per_million_yuan=get_float_env(
+        "MODEL_RERANK_PRICE_PER_MILLION_YUAN",
+        0.0,
+    ),
 )

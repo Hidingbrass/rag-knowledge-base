@@ -52,6 +52,23 @@ def test_parse_job_analyze_response_accepts_json_code_block():
     assert result.interview_questions == ["你如何设计文档重复检测？"]
 
 
+def test_parse_job_analyze_response_rejects_score_outside_range():
+    raw_answer = """
+    {
+      "match_score": 150,
+      "matched_skills": [],
+      "missing_skills": [],
+      "strengths": [],
+      "risks": [],
+      "suggestions": [],
+      "interview_questions": []
+    }
+    """
+
+    with pytest.raises(BadRequestError, match="字段不符合要求"):
+        job_service.parse_job_analyze_response(raw_answer)
+
+
 def test_analyze_job_match_calls_chat_completion(monkeypatch):
     def fake_chat_completion(messages):
         assert messages[0]["role"] == "system"
@@ -423,7 +440,9 @@ def test_optimize_resume_calls_chat_completion(monkeypatch):
     assert result.rewrite_suggestions[0].keywords_added == ["Embedding", "Rerank", "Chat"]
 
 
-def test_optimize_resume_rejects_empty_resume_or_jd():
+def test_optimize_resume_rejects_empty_resume_but_allows_general_mode_without_jd(
+        monkeypatch,
+):
     with pytest.raises(BadRequestError):
         job_service.optimize_resume(
             ResumeOptimizeRequest(
@@ -432,13 +451,31 @@ def test_optimize_resume_rejects_empty_resume_or_jd():
             )
         )
 
-    with pytest.raises(BadRequestError):
-        job_service.optimize_resume(
-            ResumeOptimizeRequest(
-                resume_text="我做过 Java 项目。",
-                job_description="   ",
-            )
+    def fake_chat_completion(messages):
+        assert "通用简历质量优化" in messages[0]["content"]
+        assert "未提供，请按通用简历优化模式处理" in messages[1]["content"]
+        return """
+        {
+          "summary": "增强结果量化和技术深度表达。",
+          "target_position": "通用求职简历",
+          "gap_summary": ["成果缺少量化"],
+          "rewrite_suggestions": [],
+          "missing_keywords": [],
+          "action_items": ["补充可验证指标"]
+        }
+        """
+
+    monkeypatch.setattr(job_service, "chat_completion", fake_chat_completion)
+
+    result = job_service.optimize_resume(
+        ResumeOptimizeRequest(
+            resume_text="我做过 Java 项目。",
+            job_description="   ",
         )
+    )
+
+    assert result.target_position == "通用求职简历"
+    assert result.action_items == ["补充可验证指标"]
 
 
 def test_build_interview_prep_messages_contains_resume_jd_and_schema_fields():
@@ -500,6 +537,28 @@ def test_parse_interview_prep_response_accepts_json_code_block():
     assert result.technical_questions[0].question == "RAG 中如何减少幻觉？"
     assert result.behavioral_questions[0].answer_points == ["描述问题", "说明排查过程", "总结结果"]
     assert result.questions_to_ask == ["团队目前 AI 应用主要落在哪些业务场景？"]
+
+
+def test_parse_interview_prep_response_accepts_multiline_string_and_extra_object():
+    raw_answer = """
+    下面是结果：
+    {
+      "target_position": "Java 后端开发工程师",
+      "self_introduction": "第一行
+第二行",
+      "project_talking_points": [],
+      "technical_questions": [],
+      "behavioral_questions": [],
+      "questions_to_ask": [],
+      "preparation_checklist": []
+    }
+    调试信息：{"ignored": true}
+    """
+
+    result = job_service.parse_interview_prep_response(raw_answer)
+
+    assert result.target_position == "Java 后端开发工程师"
+    assert result.self_introduction == "第一行\n第二行"
 
 
 def test_prepare_interview_calls_chat_completion(monkeypatch):

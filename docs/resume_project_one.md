@@ -23,7 +23,7 @@ FastAPI + Qdrant + 通义千问企业知识库 RAG 问答系统
 - 实现多文档管理能力：document_id 隔离、文件 SHA-256 重复检测、文档列表统计、指定文档检索和删除。
 - 实现无 Rerank 与 Rerank 两条 RAG 问答链路，保留 vector_score 并新增 rerank_score，通过 rerank_min_score 控制拒答。
 - 接入 qwen3-rerank，对扩大召回候选集进行二次排序；Rerank 前不使用向量阈值过滤，避免提前丢失低向量分但高相关片段。
-- 扩展 Hybrid 检索，将向量召回和关键词召回合并去重，并支持 vector/hybrid 两种候选检索模式对比。
+- 扩展真实 Hybrid 检索：Qdrant 同时保存 Dense/Sparse 命名向量，使用倒排索引和 RRF 融合两路候选，再交给 qwen3-rerank 精排；提供四路消融评测入口。
 - 建立 30 条评测集，覆盖 22 条普通问答和 8 条拒答题，评估 Hit@K、拒答准确率、答案关键词召回、引用有效率、引用支持率和 fallback 情况。
 - 工程化拆分 FastAPI 项目结构，将 api、schemas、services、core、evaluation 分层，并统一配置、日志和异常处理。
 - 使用 pytest 固化核心回归测试，覆盖路由注册、配置默认值、Qdrant source 字段、Rerank index 回填、fallback、评测工具函数和 CLI 参数解析。
@@ -47,7 +47,7 @@ Python, FastAPI, Pydantic, Qdrant, DashScope, 通义千问 Embedding/Chat, qwen3
 当前自动化测试：
 
 ```text
-FastAPI pytest：96 passed。
+FastAPI pytest：128 passed。
 ```
 
 历史 Rerank 优化效果：

@@ -15,6 +15,8 @@ import com.example.aikb.exception.BusinessException;
 import com.example.aikb.exception.ForbiddenException;
 import com.example.aikb.repository.ChatMessageRepository;
 import com.example.aikb.repository.KnowledgeDocumentRepository;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -24,10 +26,13 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -62,8 +67,7 @@ class ChatServiceTests {
      *
      * ownerId=user-1，department=dev：
      * - user-1 是知识库所有者，可以访问；
-     * - 其他 dev 部门用户也可以访问；
-     * - 非 dev 部门且不是 owner 的用户应该被拒绝。
+     * - 其他用户即使学习方向同为 dev，也不能访问。
      */
     private KnowledgeBase createDevKnowledgeBase() {
         return knowledgeBaseService.create(new CreateKnowledgeBaseRequest(
@@ -133,9 +137,12 @@ class ChatServiceTests {
                         0,
                         "RAG 的英文全称是 Retrieval-Augmented Generation。",
                         0.83,
+                        null,
+                        0.75,
                         0.95
                 )),
                 "rerank",
+                "hybrid",
                 null,
                 1.23
         );
@@ -172,11 +179,90 @@ class ChatServiceTests {
     }
 
     @Test
+    void streamAnswerShouldSaveUserImmediatelyAndAssistantAfterDoneEvent() throws Exception {
+        KnowledgeBase knowledgeBase = knowledgeBaseService.create(new CreateKnowledgeBaseRequest(
+                "流式问答知识库",
+                "用于测试流式消息持久化",
+                "user-1",
+                "研发部"
+        ));
+        ChatSession session = chatService.createSession(new CreateChatSessionRequest(
+                knowledgeBase.id(),
+                "user-1",
+                "研发部",
+                "流式 RAG 会话"
+        ));
+        saveDocument(knowledgeBase.id(), "stream-doc-1", DocumentStatus.AVAILABLE);
+
+        ObjectMapper mapper = new ObjectMapper();
+        doAnswer(invocation -> {
+            Consumer<JsonNode> consumer = invocation.getArgument(2);
+            consumer.accept(mapper.readTree("""
+                    {"type":"status","stage":"retrieving","message":"正在检索"}
+                    """));
+            consumer.accept(mapper.readTree("""
+                    {
+                      "type":"sources",
+                      "sources":[{"filename":"stream.md","page_number":1}],
+                      "retrieval_mode":"rerank",
+                      "rerank_elapsed_seconds":0.2
+                    }
+                    """));
+            consumer.accept(mapper.readTree("""
+                    {"type":"delta","content":"第一段"}
+                    """));
+            consumer.accept(mapper.readTree("""
+                    {"type":"delta","content":"第二段"}
+                    """));
+            consumer.accept(mapper.readTree("""
+                    {"type":"done","retrieval_mode":"rerank","rerank_elapsed_seconds":0.2}
+                    """));
+            return null;
+        }).when(fastApiRagClient).streamAskWithRerank(
+                anyString(),
+                anyString(),
+                any()
+        );
+
+        ChatService.StreamingAsk prepared = chatService.prepareStreamingAsk(
+                session.id(),
+                "user-1",
+                "研发部",
+                "请流式回答",
+                "stream-doc-1"
+        );
+
+        List<ChatMessage> messagesAfterAccept =
+                chatMessageRepository.findBySessionIdOrderByCreatedAtAsc(session.id());
+        assertThat(messagesAfterAccept).hasSize(1);
+        assertThat(messagesAfterAccept.get(0).role()).isEqualTo(MessageRole.USER);
+
+        List<JsonNode> browserEvents = new java.util.ArrayList<>();
+        chatService.streamAnswer(prepared, browserEvents::add);
+
+        assertThat(browserEvents).extracting(event -> event.path("type").asText())
+                .containsExactly("status", "sources", "delta", "delta", "done");
+        assertThat(browserEvents.get(2).path("content").asText()).isEqualTo("第一段");
+
+        List<ChatMessage> completedMessages =
+                chatMessageRepository.findBySessionIdOrderByCreatedAtAsc(session.id());
+        assertThat(completedMessages).hasSize(2);
+        ChatMessage assistant = completedMessages.get(1);
+        assertThat(assistant.role()).isEqualTo(MessageRole.ASSISTANT);
+        assertThat(assistant.content()).isEqualTo("第一段第二段");
+        assertThat(assistant.sourcesJson()).contains("stream.md");
+        assertThat(assistant.retrievalMode()).isEqualTo("rerank");
+        assertThat(assistant.rerankElapsedSeconds()).isEqualTo(0.2);
+        assertThat(browserEvents.get(4).path("message").path("content").asText())
+                .isEqualTo("第一段第二段");
+    }
+
+    @Test
     void listMessagesShouldRejectUnauthorizedUser() {
         ChatSession session = createDevSession();
 
-        // user-2 既不是知识库 owner，也不属于 dev 部门，所以不能读取这个会话的消息。
-        assertThatThrownBy(() -> chatService.listMessages(session.id(), "user-2", "qa"))
+        // user-2 与 owner 的学习方向相同，但个人知识库仍然只能由 owner 访问。
+        assertThatThrownBy(() -> chatService.listMessages(session.id(), "user-2", "dev"))
                 .isInstanceOf(BusinessException.class);
     }
 
@@ -189,7 +275,7 @@ class ChatServiceTests {
         assertThatThrownBy(() -> chatService.ask(
                 session.id(),
                 "user-2",
-                "qa",
+                "dev",
                 "What is RAG?",
                 "fastapi-doc-1"
         )).isInstanceOf(BusinessException.class);

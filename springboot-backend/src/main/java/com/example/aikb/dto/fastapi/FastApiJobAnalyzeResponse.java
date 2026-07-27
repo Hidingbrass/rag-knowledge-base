@@ -24,6 +24,21 @@ public record FastApiJobAnalyzeResponse(
         List<String> suggestions,
 
         @JsonProperty("interview_questions")
-        List<String> interviewQuestions
-) {
+        List<String> interviewQuestions,
+
+        @JsonProperty("model_usage")
+        FastApiModelUsage modelUsage
+) implements FastApiUsageCarrier {
+    public FastApiJobAnalyzeResponse(
+            int matchScore,
+            List<String> matchedSkills,
+            List<String> missingSkills,
+            List<String> strengths,
+            List<String> risks,
+            List<String> suggestions,
+            List<String> interviewQuestions
+    ) {
+        this(matchScore, matchedSkills, missingSkills, strengths, risks, suggestions,
+                interviewQuestions, null);
+    }
 }

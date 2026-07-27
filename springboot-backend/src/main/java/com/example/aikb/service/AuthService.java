@@ -5,6 +5,7 @@ import com.example.aikb.dto.auth.AuthLoginRequest;
 import com.example.aikb.dto.auth.AuthRegisterRequest;
 import com.example.aikb.dto.auth.AuthResponse;
 import com.example.aikb.dto.auth.AuthUserResponse;
+import com.example.aikb.dto.auth.UpdateProfileRequest;
 import com.example.aikb.entity.AppUser;
 import com.example.aikb.exception.BusinessException;
 import com.example.aikb.exception.UnauthorizedException;
@@ -12,6 +13,7 @@ import com.example.aikb.repository.AppUserRepository;
 import com.example.aikb.security.JwtService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.Locale;
@@ -68,6 +70,22 @@ public class AuthService {
         }
 
         return toAuthResponse(user);
+    }
+
+    public AuthUserResponse getCurrentUser(UUID userId) {
+        return AuthUserResponse.from(getRequiredUser(userId));
+    }
+
+    @Transactional
+    public AuthResponse updateProfile(UUID userId, UpdateProfileRequest request) {
+        AppUser user = getRequiredUser(userId);
+        user.updateProfile(request.displayName().trim(), request.department().trim());
+        return toAuthResponse(appUserRepository.save(user));
+    }
+
+    private AppUser getRequiredUser(UUID userId) {
+        return appUserRepository.findById(userId)
+                .orElseThrow(() -> new UnauthorizedException("账号不存在或已失效"));
     }
 
     private AuthResponse toAuthResponse(AppUser user) {

@@ -48,6 +48,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -212,8 +213,11 @@ class JobAgentControllerTests {
                         .param("resumeText", "我做过 Spring Boot RAG 项目"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data.match_score").value(92))
-                .andExpect(jsonPath("$.data.missing_skills[0]").value("Redis"));
+                .andExpect(jsonPath("$.data.analysis.match_score").value(92))
+                .andExpect(jsonPath("$.data.analysis.missing_skills[0]").value("Redis"))
+                .andExpect(jsonPath("$.data.extractedJobDescription").value("岗位要求 Java、Spring Boot、Redis。"))
+                .andExpect(jsonPath("$.data.filename").value("jd.png"))
+                .andExpect(jsonPath("$.data.sourceType").value("image_ocr"));
 
         verify(fastApiRagClient).extractJdText(any(MultipartFile.class));
         verify(fastApiRagClient).analyzeJob(
@@ -812,7 +816,7 @@ class JobAgentControllerTests {
     }
 
     @Test
-    void optimizeResumeShouldReturnBadRequestWhenResumeOrJdIsBlank() throws Exception {
+    void optimizeResumeShouldRejectBlankResumeButAllowBlankJdGeneralMode() throws Exception {
         mockMvc.perform(post("/api/job-agent/resume/optimize")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -826,6 +830,18 @@ class JobAgentControllerTests {
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.message").value("resumeText: 简历内容不能为空"));
 
+        when(fastApiRagClient.optimizeResume(
+                "Spring Boot FastAPI RAG 项目",
+                ""
+        )).thenReturn(new FastApiResumeOptimizeResponse(
+                "增强结果量化和技术深度表达。",
+                "通用求职简历",
+                List.of("成果缺少量化"),
+                List.of(),
+                List.of(),
+                List.of("补充可验证指标")
+        ));
+
         mockMvc.perform(post("/api/job-agent/resume/optimize")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -835,12 +851,13 @@ class JobAgentControllerTests {
                                   "jobDescription": ""
                                 }
                                 """))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.success").value(false))
-                .andExpect(jsonPath("$.message").value("jobDescription: 岗位 JD 不能为空"));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.target_position").value("通用求职简历"))
+                .andExpect(jsonPath("$.data.action_items[0]").value("补充可验证指标"));
 
         verify(fastApiRagClient, never()).optimizeResume("", "需要 Java、Spring Boot、RAG");
-        verify(fastApiRagClient, never()).optimizeResume("Spring Boot FastAPI RAG 项目", "");
+        verify(fastApiRagClient).optimizeResume("Spring Boot FastAPI RAG 项目", "");
     }
 
     @Test
@@ -1243,6 +1260,56 @@ class JobAgentControllerTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true));
         assertThat(jobGeneratedTaskRepository.findById(taskId)).isEmpty();
+    }
+
+    @Test
+    void reviewGeneratedTaskShouldAllowOnlyOwnerAndRejectPendingStatus() throws Exception {
+        UUID taskId = UUID.randomUUID();
+        jobGeneratedTaskRepository.save(new JobGeneratedTask(
+                taskId,
+                "demo-user",
+                JobGeneratedTaskType.RESUME_OPTIMIZE,
+                "Spring Boot FastAPI RAG 项目",
+                "需要 Java、Spring Boot、RAG",
+                "{\"summary\":\"优化建议\"}",
+                Instant.now()
+        ));
+
+        mockMvc.perform(patch("/api/job-agent/generated-tasks/{taskId}/review", taskId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "userId": "other-user",
+                                  "status": "APPROVED",
+                                  "comment": "确认"
+                                }
+                                """))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(patch("/api/job-agent/generated-tasks/{taskId}/review", taskId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "userId": "demo-user",
+                                  "status": "PENDING_REVIEW"
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("审核结果只能是通过或驳回"));
+
+        mockMvc.perform(patch("/api/job-agent/generated-tasks/{taskId}/review", taskId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "userId": "demo-user",
+                                  "status": "REJECTED",
+                                  "comment": "项目结果需要补充证据"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.reviewStatus").value("REJECTED"))
+                .andExpect(jsonPath("$.data.reviewComment").value("项目结果需要补充证据"))
+                .andExpect(jsonPath("$.data.reviewedAt").isNotEmpty());
     }
 
     @Test

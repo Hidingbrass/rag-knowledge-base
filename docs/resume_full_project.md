@@ -1,8 +1,8 @@
-# 完整项目简历材料：企业智能知识库 RAG 系统 + 求职辅助 Agent
+# 完整项目简历材料：知途 AI 学习资料库 + 求职辅助 Agent
 
 ## 简历项目名称
 
-Spring Boot + FastAPI 企业智能知识库 RAG 问答系统 + 求职辅助 Agent
+知途 AI：Spring Boot + FastAPI 学习资料库 RAG + 求职辅助 Agent
 
 ## 一句话描述
 
@@ -23,13 +23,16 @@ Spring Boot + FastAPI 企业智能知识库 RAG 问答系统 + 求职辅助 Agen
 - 实现 PDF 文档入库流程：Spring Boot 接收上传文件并保存文档状态，FastAPI 完成解析、切分、Embedding 和 Qdrant 向量写入，处理完成后回写 AVAILABLE / FAILED。
 - 使用 MySQL 持久化知识库、文档、聊天会话和聊天消息，替换早期内存存储，使刷新页面和重启服务后数据仍可恢复。
 - 实现 SHA-256 重复文档检测，同一知识库内重复 PDF 可直接复用已有文档，避免重复解析和重复向量入库。
-- 实现 owner / department 访问控制，限制无权限用户查看文档、创建会话、查看消息和发起提问。
+- 实现个人知识库 owner-only 访问控制，并以真实 JWT 双账号用例验证同学习方向用户仍无法查看文档、创建会话、查看消息或发起提问。
 - 实现指定文档 RAG 问答，Spring Boot 校验 documentId 是否属于当前会话的知识库，避免跨知识库越权检索。
 - 在 FastAPI 中实现无 Rerank 与 Rerank 两条链路，保留 vector_score 并新增 rerank_score，通过 rerank_min_score 控制拒答。
 - 建立 30 条评测集，覆盖普通问答和拒答题，评估 Hit@K、拒答准确率、答案关键词召回、引用有效率、引用支持率、fallback 和 Rerank 耗时。
 - 提供 Vue3 企业知识库工作台，支持创建知识库、上传 PDF、创建会话、提问、查看引用来源、切换用户身份、权限验证、求职分析分区展示、简历结构化解析、JD 结构化解析、简历优化建议、面试准备包、STAR 面试答案、生成历史、简历版本管理、岗位收藏、分析结果对比决策面板和 Markdown 报告导出，并保留原始联调页用于接口排查。
 - 扩展求职辅助 Agent：FastAPI 负责构建求职分析、简历结构化、JD 结构化、简历优化、面试准备和 STAR 面试答案 Prompt、调用通义千问并解析 JSON；Spring Boot 提供 `POST /api/job-agent/analyze`、`POST /api/job-agent/resume/parse`、`POST /api/job-agent/jd/parse`、`POST /api/job-agent/resume/optimize`、`POST /api/job-agent/interview/prepare`、`POST /api/job-agent/interview/star-answer`、`GET /api/job-agent/tasks`、`GET /api/job-agent/tasks/{taskId}`、`DELETE /api/job-agent/tasks/{taskId}`、`POST /api/job-agent/tasks/compare`、生成历史接口、简历版本接口和收藏岗位 CRUD 接口，保存、查询、删除求职分析历史、生成历史、简历版本与收藏岗位，并校验访问权限。
-- 使用 pytest 和 JUnit 固化回归测试，覆盖 FastAPI 核心链路、评测工具函数、Spring Boot 权限边界、聊天流程、文档重复检测和静态页面。
+- 建立可信 AI 工程闭环：校验 RAG 引用并替换未验证流式答案，阻断高风险提示词注入，调用模型前脱敏联系方式，敏感字段支持 AES-256-GCM 加密。
+- 统一记录 Chat、Embedding、Rerank 的重试、Token 和估算费用，在 Spring Boot 聚合 24 小时成功率和 P95；瞬时故障指数退避重试，连续失败触发单进程熔断。
+- 使用冻结数据集比较不同模型的回答、拒答 F1、引用、延迟、Token 和费用；求职生成内容默认待审核，用户可通过或驳回并填写意见。
+- 使用 pytest、JUnit 和 Vitest 固化回归测试，覆盖 FastAPI 核心链路、评测与安全规则、Spring Boot 权限边界、聊天流程、敏感字段转换和 Vue3 状态交互。
 - 使用 Docker Compose 管理 MySQL、Qdrant 和 FastAPI 容器，配合 .env.example、启动文档和新电脑恢复指南提升项目可复现性。
 ```
 
@@ -61,8 +64,9 @@ Java 21, Spring Boot, Spring Data JPA, MySQL, Python, FastAPI, Pydantic, Qdrant,
 自动化测试：
 
 ```text
-FastAPI pytest：96 passed
-Spring Boot Maven test：57 passed
+FastAPI pytest：167 passed
+Spring Boot Maven test：121 passed
+Vue3 Vitest：10 passed
 ```
 
 Rerank 阈值实验结论：

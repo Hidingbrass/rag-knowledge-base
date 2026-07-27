@@ -18,6 +18,20 @@ public record FastApiInterviewPrepResponse(
         @JsonProperty("questions_to_ask")
         List<String> questionsToAsk,
         @JsonProperty("preparation_checklist")
-        List<String> preparationChecklist
-) {
+        List<String> preparationChecklist,
+        @JsonProperty("model_usage")
+        FastApiModelUsage modelUsage
+) implements FastApiUsageCarrier {
+    public FastApiInterviewPrepResponse(
+            String targetPosition,
+            String selfIntroduction,
+            List<FastApiProjectTalkingPoint> projectTalkingPoints,
+            List<FastApiInterviewQuestionAnswer> technicalQuestions,
+            List<FastApiInterviewQuestionAnswer> behavioralQuestions,
+            List<String> questionsToAsk,
+            List<String> preparationChecklist
+    ) {
+        this(targetPosition, selfIntroduction, projectTalkingPoints, technicalQuestions,
+                behavioralQuestions, questionsToAsk, preparationChecklist, null);
+    }
 }

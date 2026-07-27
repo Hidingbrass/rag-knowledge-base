@@ -14,6 +14,21 @@ public record FastApiResumeParseResponse(
         List<String> education,
         List<String> certifications,
         List<String> strengths,
-        List<String> keywords
-) {
+        List<String> keywords,
+        @JsonProperty("model_usage")
+        FastApiModelUsage modelUsage
+) implements FastApiUsageCarrier {
+    public FastApiResumeParseResponse(
+            List<String> targetRoles,
+            List<String> skills,
+            List<FastApiResumeProject> projects,
+            List<String> workExperiences,
+            List<String> education,
+            List<String> certifications,
+            List<String> strengths,
+            List<String> keywords
+    ) {
+        this(targetRoles, skills, projects, workExperiences, education, certifications,
+                strengths, keywords, null);
+    }
 }

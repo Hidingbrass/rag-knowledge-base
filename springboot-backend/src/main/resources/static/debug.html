@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>企业知识库 RAG 联调页</title>
+    <title>知途 AI 联调页</title>
     <link rel="icon" href="data:,">
     <style>
         body {
@@ -321,9 +321,9 @@
 </head>
 <body>
 <header>
-    <h1>企业知识库 RAG 联调页</h1>
+    <h1>知途 AI 联调页</h1>
     <div class="hint">
-        这个页面由 Spring Boot 静态资源提供，用来快速测试知识库、PDF 入库、会话问答、聊天记录和求职辅助 Agent。
+        这个页面由 Spring Boot 静态资源提供，用来快速测试学习资料库、PDF 入库、AI 伴学、聊天记录和求职工具。
         页面刷新后会重新从 MySQL 加载知识库、文档、会话和求职分析历史。
     </div>
 </header>
@@ -333,7 +333,7 @@
         <section>
             <h2>演示路线</h2>
             <ol class="demo-steps">
-                <li>选择身份：owner、同部门用户、无权限用户。</li>
+                <li>选择身份：owner、同学习方向非 owner、不同学习方向非 owner。</li>
                 <li>创建或选择知识库，上传 PDF，观察重复上传提示。</li>
                 <li>创建会话，选择 fastApiDocumentId 后发起 RAG 问答。</li>
                 <li>查看聊天记录、引用来源、rerank 分数和权限失败提示。</li>
@@ -379,17 +379,17 @@
                     <input id="ownerId" value="user-1">
                 </div>
                 <div>
-                    <label for="department">部门</label>
+                    <label for="department">学习方向（department 兼容字段）</label>
                     <input id="department" value="研发部">
                 </div>
             </div>
             <div class="identity-buttons">
                 <button class="secondary" onclick="switchIdentity('user-1', '研发部')">切换为 owner：user-1 / 研发部</button>
-                <button class="secondary" onclick="switchIdentity('user-2', '研发部')">切换为同部门用户：user-2 / 研发部</button>
-                <button class="secondary" onclick="switchIdentity('user-3', '测试部')">切换为无权限用户：user-3 / 测试部</button>
+                <button class="secondary" onclick="switchIdentity('user-2', '研发部')">同学习方向非 owner：user-2 / 研发部</button>
+                <button class="secondary" onclick="switchIdentity('user-3', '测试部')">不同学习方向非 owner：user-3 / 测试部</button>
             </div>
             <div class="hint">
-                这几个按钮用于手动验证权限：owner 和同部门用户可以访问，无权限用户读取文档、读取消息或提问时应该被后端拒绝。
+                这几个按钮用于手动验证 owner-only 权限：只有 owner 可以访问；其他用户即使学习方向相同也应被后端拒绝。
             </div>
 
             <button onclick="createKnowledgeBase()">创建知识库</button>
@@ -492,7 +492,7 @@
             <input id="jobUserId" value="demo-user">
 
             <label for="jobResumeText">简历文本</label>
-            <textarea id="jobResumeText">我做过 Spring Boot + FastAPI 企业知识库 RAG 项目，使用 MySQL 保存业务数据，使用 Qdrant 保存向量，接入通义千问完成 Embedding、Rerank 和问答。</textarea>
+            <textarea id="jobResumeText">我做过知途 AI 学习与求职成长平台，使用 Spring Boot + FastAPI 构建业务与 AI 服务，使用 Qdrant 完成 Hybrid Retrieval，并接入通义千问实现 Rerank 和问答。</textarea>
 
             <label for="jobDescription">岗位 JD</label>
             <textarea id="jobDescription">岗位要求熟悉 Java、Spring Boot、MySQL、Python、FastAPI，有 AI 应用或 RAG 项目经验，了解向量数据库和大模型调用。</textarea>
@@ -640,7 +640,7 @@
      * 把后端错误转换成更适合页面演示的提示。
      *
      * 后端仍然负责真正的权限拦截；前端只负责把“为什么失败”讲清楚。
-     * 这样测试 owner、同部门用户、无权限用户时，不需要再去控制台里翻原始响应。
+     * 这样测试 owner、同学习方向非 owner、不同学习方向非 owner 时，不需要再去控制台里翻原始响应。
      */
     function buildErrorMessage(data, response) {
         const backendMessage = data && data.message
@@ -651,7 +651,7 @@
             return (
                 `无权访问。\n` +
                 `当前身份：${currentIdentityText()}\n` +
-                `访问规则：知识库 owner 或同部门用户可以访问。\n` +
+                `访问规则：个人知识库仅 owner 可以访问，学习方向不参与授权。\n` +
                 `后端信息：${backendMessage}`
             );
         }
@@ -704,7 +704,7 @@
 
     async function copyDemoSummary() {
         const summary = [
-            "企业知识库 RAG 演示摘要",
+            "知途 AI 演示摘要",
             `当前身份：${currentIdentityText()}`,
             `知识库：${state.knowledgeBaseId || "-"}`,
             `文档：${state.fastApiDocumentId || "-"}`,
@@ -729,7 +729,7 @@
     }
 
     async function loadKnowledgeBases(preferredId = "") {
-        state.knowledgeBases = await requestJson("/api/knowledge-bases");
+        state.knowledgeBases = await requestJson(`/api/knowledge-bases${currentUserQuery()}`);
         renderSelect(
             "knowledgeBaseSelect",
             state.knowledgeBases,

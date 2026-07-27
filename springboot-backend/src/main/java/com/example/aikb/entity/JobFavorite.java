@@ -1,6 +1,7 @@
 package com.example.aikb.entity;
 
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
@@ -8,6 +9,7 @@ import jakarta.persistence.Table;
 
 import java.time.Instant;
 import java.util.UUID;
+import com.example.aikb.security.SensitiveTextConverter;
 
 @Entity
 @Table(
@@ -30,12 +32,14 @@ public class JobFavorite {
     private String companyName;
 
     @Column(nullable = false, columnDefinition = "TEXT")
+    @Convert(converter = SensitiveTextConverter.class)
     private String jobDescription;
 
     @Column
     private String sourceUrl;
 
     @Column(columnDefinition = "TEXT")
+    @Convert(converter = SensitiveTextConverter.class)
     private String notes;
 
     @Column(nullable = false)

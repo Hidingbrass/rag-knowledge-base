@@ -1,6 +1,7 @@
 package com.example.aikb.service;
 
 import com.example.aikb.client.FastApiRagClient;
+import com.example.aikb.dto.chat.ChatMessageResponse;
 import com.example.aikb.dto.chat.CreateChatSessionRequest;
 import com.example.aikb.dto.fastapi.FastApiRagResponse;
 import com.example.aikb.entity.ChatMessage;
@@ -14,11 +15,13 @@ import com.example.aikb.repository.ChatMessageRepository;
 import com.example.aikb.repository.ChatSessionRepository;
 import com.example.aikb.repository.KnowledgeDocumentRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Consumer;
 
 import static com.example.aikb.common.RequestIdentity.requireDepartment;
 import static com.example.aikb.common.RequestIdentity.requireUserId;
@@ -227,6 +230,36 @@ public class ChatService {
                                   String department,
                                   String question,
                                   String documentId) {
+        StreamingAsk prepared = prepareStreamingAsk(
+                sessionId,
+                userId,
+                department,
+                question,
+                documentId
+        );
+
+        FastApiRagResponse response = fastApiRagClient.askWithRerank(question, documentId);
+        saveAssistantMessage(
+                prepared.session(),
+                response.answer(),
+                toSourcesJson(response),
+                response.retrievalMode(),
+                response.rerankElapsedSeconds()
+        );
+        return response;
+    }
+
+    /**
+     * 在返回流式响应之前完成权限、文档归属、限流校验并立即保存用户消息。
+     *
+     * 这样无权限请求仍会在响应头发出前得到标准 JSON 错误；合法请求则可以让前端
+     * 立刻显示已经进入聊天记录的用户问题。
+     */
+    public StreamingAsk prepareStreamingAsk(UUID sessionId,
+                                            String userId,
+                                            String department,
+                                            String question,
+                                            String documentId) {
         ChatSession session = getRequiredSessionWithAccess(sessionId, userId, department);
         validateDocumentBelongsToSessionKnowledgeBase(documentId, session.knowledgeBaseId());
         aiRateLimitService.checkAiCallAllowed(userId, "RAG_CHAT");
@@ -241,24 +274,110 @@ public class ChatService {
                 null,
                 Instant.now()
         );
-        chatMessageRepository.save(userMessage);
+        ChatMessage savedUserMessage = chatMessageRepository.save(userMessage);
+        return new StreamingAsk(session, savedUserMessage, question, documentId);
+    }
 
-        FastApiRagResponse response = fastApiRagClient.askWithRerank(question, documentId);
-        String sourcesJson = toSourcesJson(response);
+    /**
+     * 消费 FastAPI NDJSON 事件，向浏览器转发状态和文本增量，并在完成后保存 AI 消息。
+     */
+    public void streamAnswer(StreamingAsk prepared, Consumer<JsonNode> browserEventConsumer) {
+        StringBuilder answer = new StringBuilder();
+        JsonNode[] sources = {objectMapper.createArrayNode()};
+        String[] retrievalMode = {null};
+        Double[] rerankElapsedSeconds = {null};
+        boolean[] completed = {false};
 
+        fastApiRagClient.streamAskWithRerank(
+                prepared.question(),
+                prepared.documentId(),
+                event -> {
+                    String type = event.path("type").asText("");
+                    if ("delta".equals(type)) {
+                        answer.append(event.path("content").asText(""));
+                        browserEventConsumer.accept(event);
+                        return;
+                    }
+                    if ("replace".equals(type)) {
+                        answer.setLength(0);
+                        answer.append(event.path("content").asText(""));
+                        browserEventConsumer.accept(event);
+                        return;
+                    }
+                    if ("sources".equals(type)) {
+                        sources[0] = event.path("sources");
+                        retrievalMode[0] = nullableText(event, "retrieval_mode");
+                        rerankElapsedSeconds[0] = nullableDouble(event, "rerank_elapsed_seconds");
+                        browserEventConsumer.accept(event);
+                        return;
+                    }
+                    if ("done".equals(type)) {
+                        completed[0] = true;
+                        if (retrievalMode[0] == null) {
+                            retrievalMode[0] = nullableText(event, "retrieval_mode");
+                        }
+                        if (rerankElapsedSeconds[0] == null) {
+                            rerankElapsedSeconds[0] = nullableDouble(event, "rerank_elapsed_seconds");
+                        }
+                        return;
+                    }
+                    if ("error".equals(type)) {
+                        throw new BusinessException(
+                                event.path("message").asText("AI 回答生成失败，请稍后重试")
+                        );
+                    }
+                    browserEventConsumer.accept(event);
+                }
+        );
+
+        if (!completed[0]) {
+            throw new BusinessException("AI 回答流意外中断，请重新提问");
+        }
+        if (answer.toString().isBlank()) {
+            throw new BusinessException("AI 未返回有效回答，请重新提问");
+        }
+
+        ChatMessage assistantMessage = saveAssistantMessage(
+                prepared.session(),
+                answer.toString(),
+                toSourcesJson(sources[0]),
+                retrievalMode[0],
+                rerankElapsedSeconds[0]
+        );
+        var doneEvent = objectMapper.createObjectNode();
+        doneEvent.put("type", "done");
+        doneEvent.set("message", objectMapper.valueToTree(ChatMessageResponse.from(assistantMessage)));
+        browserEventConsumer.accept(doneEvent);
+    }
+
+    private ChatMessage saveAssistantMessage(
+            ChatSession session,
+            String answer,
+            String sourcesJson,
+            String retrievalMode,
+            Double rerankElapsedSeconds
+    ) {
         ChatMessage assistantMessage = new ChatMessage(
                 UUID.randomUUID(),
                 session.id(),
                 MessageRole.ASSISTANT,
-                response.answer(),
+                answer,
                 sourcesJson,
-                response.retrievalMode(),
-                response.rerankElapsedSeconds(),
+                retrievalMode,
+                rerankElapsedSeconds,
                 Instant.now()
         );
-        chatMessageRepository.save(assistantMessage);
+        return chatMessageRepository.save(assistantMessage);
+    }
 
-        return response;
+    private String nullableText(JsonNode event, String fieldName) {
+        JsonNode value = event.path(fieldName);
+        return value.isMissingNode() || value.isNull() ? null : value.asText();
+    }
+
+    private Double nullableDouble(JsonNode event, String fieldName) {
+        JsonNode value = event.path(fieldName);
+        return value.isMissingNode() || value.isNull() ? null : value.asDouble();
     }
 
     /**
@@ -269,11 +388,23 @@ public class ChatService {
      * 这样实现简单，也方便前端直接展示完整引用来源。
      */
     private String toSourcesJson(FastApiRagResponse response) {
+        return toSourcesJson(objectMapper.valueToTree(response.sources()));
+    }
+
+    private String toSourcesJson(JsonNode sources) {
         try {
-            return objectMapper.writeValueAsString(response.sources());
+            return objectMapper.writeValueAsString(sources);
         } catch (Exception exception) {
             throw new BusinessException("保存引用来源失败", exception);
         }
+    }
+
+    public record StreamingAsk(
+            ChatSession session,
+            ChatMessage userMessage,
+            String question,
+            String documentId
+    ) {
     }
 
 }

@@ -11,6 +11,7 @@
 from fastapi.testclient import TestClient
 
 from app.api import job as job_api
+from app.core.config import settings
 from app.main import app
 from app.schemas.job import (
     InterviewPrepResponse,
@@ -22,7 +23,7 @@ from app.schemas.job import (
 )
 
 
-client = TestClient(app)
+client = TestClient(app, headers={"X-API-Key": settings.fastapi_api_key})
 
 
 def test_original_routes_are_registered():
@@ -45,6 +46,7 @@ def test_original_routes_are_registered():
         "/embedding/test",
         "/rag/chat",
         "/rag/chat/rerank",
+        "/rag/chat/rerank/stream",
         "/job/analyze",
         "/job/analyze-from-file",
         "/job/resume/parse",
@@ -99,6 +101,15 @@ def test_job_analyze_route_calls_service(monkeypatch):
         "risks": ["缓存经验体现较少"],
         "suggestions": ["补充 Redis 使用场景"],
         "interview_questions": ["Rerank 解决了什么问题？"],
+        "model_usage": {
+            "models": [],
+            "upstream_call_count": 0,
+            "retry_count": 0,
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+            "estimated_cost_yuan": 0.0,
+        },
     }
 
 
@@ -388,17 +399,31 @@ def test_rerank_top_k_greater_than_candidate_k_returns_bad_request():
     }
 
 
-def test_preview_document_rejects_non_pdf_file():
-    """上传非 PDF 文件时，documents API 应该返回统一 400 错误。"""
+def test_preview_document_accepts_markdown_file():
+    """Markdown 应该进入统一预览解析流程。"""
     response = client.post(
         "/documents/preview",
         files={
-            "file": ("note.txt", b"hello", "text/plain")
+            "file": ("notes.md", "# RAG\n\n检索增强生成。".encode(), "text/markdown")
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["document_type"] == "MARKDOWN"
+    assert response.json()["chunk_count"] == 1
+
+
+def test_preview_document_rejects_unsupported_file():
+    """上传不支持的格式时，documents API 应该返回统一 400 错误。"""
+    response = client.post(
+        "/documents/preview",
+        files={
+            "file": ("notes.csv", b"name,value", "text/csv")
         },
     )
 
     assert response.status_code == 400
     assert response.json() == {
         "error_code": "BAD_REQUEST",
-        "message": "目前只支持 PDF 文件",
+        "message": "支持 PDF、Markdown、Word（DOCX）和 TXT 文件",
     }

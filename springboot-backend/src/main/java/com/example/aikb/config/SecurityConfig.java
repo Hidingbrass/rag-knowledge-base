@@ -29,8 +29,12 @@ public class SecurityConfig {
     }
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http, JwtAuthenticationFilter jwtAuthenticationFilter) throws Exception {
-        return http
+    public SecurityFilterChain securityFilterChain(
+            HttpSecurity http,
+            JwtAuthenticationFilter jwtAuthenticationFilter,
+            AuthSecurityProperties authSecurityProperties
+    ) throws Exception {
+        http
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .exceptionHandling(exception -> exception
@@ -42,11 +46,29 @@ public class SecurityConfig {
                                     """);
                         })
                 )
-                .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/me").authenticated()
-                        .anyRequest().permitAll()
-                )
-                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
-                .build();
+                .authorizeHttpRequests(auth -> {
+                    auth.requestMatchers(
+                            "/",
+                            "/index.html",
+                            "/debug.html",
+                            "/favicon.ico",
+                            "/error",
+                            "/api/health",
+                            "/api/auth/register",
+                            "/api/auth/login"
+                    ).permitAll();
+                    auth.requestMatchers("/api/auth/me").authenticated();
+
+                    if (authSecurityProperties.allowLegacyIdentityParameters()) {
+                        auth.requestMatchers("/api/**").permitAll();
+                    } else {
+                        auth.requestMatchers("/api/**").authenticated();
+                    }
+
+                    auth.anyRequest().permitAll();
+                })
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+
+        return http.build();
     }
 }

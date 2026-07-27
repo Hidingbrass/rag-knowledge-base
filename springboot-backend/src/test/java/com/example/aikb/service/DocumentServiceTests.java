@@ -6,6 +6,7 @@ import com.example.aikb.dto.knowledgebase.CreateKnowledgeBaseRequest;
 import com.example.aikb.entity.KnowledgeBase;
 import com.example.aikb.entity.KnowledgeDocument;
 import com.example.aikb.enums.DocumentStatus;
+import com.example.aikb.exception.BusinessException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -19,6 +20,7 @@ import java.util.HexFormat;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -104,6 +106,51 @@ class DocumentServiceTests {
         verify(fastApiRagClient, times(1)).indexDocument(any());
     }
 
+    @Test
+    void indexDocumentShouldAcceptMarkdownDocxAndTxt() {
+        KnowledgeBase knowledgeBase = createKnowledgeBase();
+        when(fastApiRagClient.indexDocument(any())).thenAnswer(invocation -> {
+            MockMultipartFile file = invocation.getArgument(0);
+            return new FastApiDocumentIndexResponse(
+                    "fastapi-" + file.getOriginalFilename(),
+                    file.getOriginalFilename(),
+                    2,
+                    "rag_chunks",
+                    "ignored-fastapi-hash"
+            );
+        });
+
+        List<MockMultipartFile> files = List.of(
+                documentFile("java.md", "text/markdown", "# Java"),
+                documentFile("rag.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "fake docx"),
+                documentFile("notes.txt", "text/plain", "plain notes")
+        );
+
+        for (MockMultipartFile file : files) {
+            DocumentIndexResult result = documentService.indexDocument(
+                    knowledgeBase.id(), "user-1", "研发部", file
+            );
+            assertThat(result.document().status()).isEqualTo(DocumentStatus.AVAILABLE);
+            assertThat(result.document().filename()).isEqualTo(file.getOriginalFilename());
+        }
+
+        verify(fastApiRagClient, times(3)).indexDocument(any());
+    }
+
+    @Test
+    void indexDocumentShouldRejectUnsupportedExtension() {
+        KnowledgeBase knowledgeBase = createKnowledgeBase();
+
+        assertThatThrownBy(() -> documentService.indexDocument(
+                knowledgeBase.id(),
+                "user-1",
+                "研发部",
+                documentFile("scores.csv", "text/csv", "name,value")
+        ))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("支持 PDF、Markdown、Word（DOCX）和 TXT 文件");
+    }
+
     private KnowledgeBase createKnowledgeBase() {
         return knowledgeBaseService.create(new CreateKnowledgeBaseRequest(
                 "测试知识库",
@@ -114,12 +161,11 @@ class DocumentServiceTests {
     }
 
     private MockMultipartFile pdfFile(String filename, String content) {
-        return new MockMultipartFile(
-                "file",
-                filename,
-                "application/pdf",
-                content.getBytes(StandardCharsets.UTF_8)
-        );
+        return documentFile(filename, "application/pdf", content);
+    }
+
+    private MockMultipartFile documentFile(String filename, String contentType, String content) {
+        return new MockMultipartFile("file", filename, contentType, content.getBytes(StandardCharsets.UTF_8));
     }
 
     private String sha256(String content) {

@@ -35,6 +35,9 @@ upload:
     ttl-seconds: 300
 
 auth:
+  security:
+    # 现有 Controller 测试覆盖旧版参数身份流程；严格鉴权由 StrictAuthenticationTests 单独覆盖。
+    allow-legacy-identity-parameters: true
   jwt:
     secret: test-only-change-me-to-a-long-random-secret
     expires-in-seconds: 86400

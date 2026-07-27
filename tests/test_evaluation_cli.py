@@ -9,6 +9,7 @@ from app.evaluation.evaluate_generation_rerank import parse_args as parse_rerank
 from app.evaluation.evaluate_rerank import parse_args as parse_rerank_retrieval_args
 from app.evaluation.evaluate_rerank_params import parse_args as parse_rerank_params_args
 from app.evaluation.evaluate_retrieval import parse_args as parse_retrieval_args
+from app.evaluation.evaluate_retrieval_ablation import parse_args as parse_ablation_args
 
 
 def test_generation_parse_args_uses_defaults():
@@ -33,7 +34,7 @@ def test_rerank_parse_args_uses_defaults():
     assert args.rerank_top_k == settings.default_rerank_top_k
     assert args.rerank_min_score == settings.default_rerank_min_score
     assert args.retrieval_mode == "vector"
-    assert args.keyword_limit == 6
+    assert args.sparse_limit == settings.default_sparse_limit
     assert args.repeat_count == 3
     assert args.rerank_min_score_values == [0.72, 0.75, 0.78]
 
@@ -78,6 +79,22 @@ def test_retrieval_parse_args_accepts_custom_values():
     assert args.min_score == 0.5
 
 
+def test_retrieval_ablation_parse_args_accepts_custom_values():
+    args = parse_ablation_args([
+        "--dataset", "technical_docs",
+        "--candidate-k", "8",
+        "--sparse-limit", "7",
+        "--rerank-top-k", "4",
+        "--no-rerank-document-diversity",
+    ])
+
+    assert args.dataset == "technical_docs"
+    assert args.candidate_k == 8
+    assert args.sparse_limit == 7
+    assert args.rerank_top_k == 4
+    assert args.rerank_document_diversity is False
+
+
 def test_rerank_retrieval_parse_args_uses_defaults():
     args = parse_rerank_retrieval_args([])
 
@@ -98,7 +115,7 @@ def test_rerank_retrieval_parse_args_accepts_custom_values():
             "0.72",
             "--retrieval-mode",
             "hybrid",
-            "--keyword-limit",
+            "--sparse-limit",
             "5",
             "--mode",
             "comparison",
@@ -109,7 +126,7 @@ def test_rerank_retrieval_parse_args_accepts_custom_values():
     assert args.rerank_top_k == 4
     assert args.rerank_min_score == 0.72
     assert args.retrieval_mode == "hybrid"
-    assert args.keyword_limit == 5
+    assert args.sparse_limit == 5
     assert args.mode == "comparison"
 
 
