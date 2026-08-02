@@ -964,7 +964,9 @@ export default {
                 assistantMessage.streamStatus = "";
                 this.chatStreamStage = "completed";
                 this.chatStreamStatus = "回答已完成";
-                this.setStatus("问答完成，回答和引用已保存。");
+                this.setStatus(assistantMessage.retrievalMode === "small_talk"
+                    ? "回复已完成并保存。"
+                    : "问答完成，回答和引用已保存。");
             } catch (error) {
                 const stopped = error?.name === "AbortError";
                 assistantMessage.streaming = false;

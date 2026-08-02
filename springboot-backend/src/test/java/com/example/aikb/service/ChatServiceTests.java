@@ -62,6 +62,9 @@ class ChatServiceTests {
     @MockBean
     private FastApiRagClient fastApiRagClient;
 
+    @MockBean
+    private AiRateLimitService aiRateLimitService;
+
     /**
      * 创建一个测试用知识库。
      *
@@ -108,6 +111,118 @@ class ChatServiceTests {
                 now,
                 now
         ));
+    }
+
+    @Test
+    void askShouldReplyToGreetingWithoutCallingAiServices() {
+        KnowledgeBase knowledgeBase = createDevKnowledgeBase();
+        ChatSession session = chatService.createSession(new CreateChatSessionRequest(
+                knowledgeBase.id(),
+                "user-1",
+                "dev",
+                "小聊同步会话"
+        ));
+        saveDocument(knowledgeBase.id(), "small-talk-doc", DocumentStatus.AVAILABLE);
+
+        FastApiRagResponse response = chatService.ask(
+                session.id(),
+                "user-1",
+                "dev",
+                "你好！",
+                "small-talk-doc"
+        );
+
+        assertThat(response.answer()).contains("知途 AI");
+        assertThat(response.sources()).isEmpty();
+        assertThat(response.retrievalMode()).isEqualTo("small_talk");
+
+        List<ChatMessage> messages = chatMessageRepository.findBySessionIdOrderByCreatedAtAsc(session.id());
+        assertThat(messages).hasSize(2);
+        assertThat(messages.get(0).content()).isEqualTo("你好！");
+        assertThat(messages.get(1).content()).isEqualTo(response.answer());
+        assertThat(messages.get(1).sourcesJson()).isNull();
+        assertThat(messages.get(1).retrievalMode()).isEqualTo("small_talk");
+        assertThat(messages.get(1).rerankElapsedSeconds()).isNull();
+
+        verify(aiRateLimitService, never()).checkAiCallAllowed(anyString(), anyString());
+        verify(fastApiRagClient, never()).askWithRerank(anyString(), anyString());
+    }
+
+    @Test
+    void mixedGreetingAndKnowledgeQuestionShouldStillUseRag() {
+        KnowledgeBase knowledgeBase = createDevKnowledgeBase();
+        ChatSession session = chatService.createSession(new CreateChatSessionRequest(
+                knowledgeBase.id(),
+                "user-1",
+                "dev",
+                "混合问题会话"
+        ));
+        saveDocument(knowledgeBase.id(), "mixed-question-doc", DocumentStatus.AVAILABLE);
+
+        String question = "你好，请总结这份文档";
+        FastApiRagResponse fastApiResponse = new FastApiRagResponse(
+                question,
+                "这份文档介绍了检索增强生成 [1]。",
+                List.of(),
+                "rerank",
+                "hybrid",
+                null,
+                0.3
+        );
+        when(fastApiRagClient.askWithRerank(question, "mixed-question-doc"))
+                .thenReturn(fastApiResponse);
+
+        FastApiRagResponse response = chatService.ask(
+                session.id(),
+                "user-1",
+                "dev",
+                question,
+                "mixed-question-doc"
+        );
+
+        assertThat(response).isSameAs(fastApiResponse);
+        assertThat(response.retrievalMode()).isEqualTo("rerank");
+        verify(aiRateLimitService).checkAiCallAllowed("user-1", "RAG_CHAT");
+        verify(fastApiRagClient).askWithRerank(question, "mixed-question-doc");
+    }
+
+    @Test
+    void streamAnswerShouldReplyToCapabilityQuestionWithoutCallingAiServices() {
+        KnowledgeBase knowledgeBase = createDevKnowledgeBase();
+        ChatSession session = chatService.createSession(new CreateChatSessionRequest(
+                knowledgeBase.id(),
+                "user-1",
+                "dev",
+                "小聊流式会话"
+        ));
+        saveDocument(knowledgeBase.id(), "small-talk-stream-doc", DocumentStatus.AVAILABLE);
+
+        ChatService.StreamingAsk prepared = chatService.prepareStreamingAsk(
+                session.id(),
+                "user-1",
+                "dev",
+                "你能做什么？",
+                "small-talk-stream-doc"
+        );
+
+        assertThat(chatMessageRepository.findBySessionIdOrderByCreatedAtAsc(session.id())).hasSize(1);
+
+        List<JsonNode> browserEvents = new java.util.ArrayList<>();
+        chatService.streamAnswer(prepared, browserEvents::add);
+
+        assertThat(browserEvents).extracting(event -> event.path("type").asText())
+                .containsExactly("delta", "done");
+        assertThat(browserEvents.get(0).path("content").asText()).contains("资料");
+        assertThat(browserEvents.get(1).path("message").path("retrievalMode").asText())
+                .isEqualTo("small_talk");
+
+        List<ChatMessage> messages = chatMessageRepository.findBySessionIdOrderByCreatedAtAsc(session.id());
+        assertThat(messages).hasSize(2);
+        assertThat(messages.get(1).sourcesJson()).isNull();
+        assertThat(messages.get(1).retrievalMode()).isEqualTo("small_talk");
+
+        verify(aiRateLimitService, never()).checkAiCallAllowed(anyString(), anyString());
+        verify(fastApiRagClient, never()).streamAskWithRerank(anyString(), anyString(), any());
     }
 
     @Test
@@ -176,6 +291,7 @@ class ChatServiceTests {
         assertThat(assistantMessage.sourcesJson()).contains("demo.pdf");
         assertThat(assistantMessage.retrievalMode()).isEqualTo("rerank");
         assertThat(assistantMessage.rerankElapsedSeconds()).isEqualTo(1.23);
+        verify(aiRateLimitService).checkAiCallAllowed("user-1", "RAG_CHAT");
     }
 
     @Test
@@ -305,6 +421,31 @@ class ChatServiceTests {
                 .hasMessageContaining("无权使用该文档");
 
         assertThat(chatMessageRepository.findBySessionIdOrderByCreatedAtAsc(session.id())).isEmpty();
+        verify(fastApiRagClient, never()).askWithRerank(anyString(), anyString());
+    }
+
+    @Test
+    void greetingShouldNotBypassDocumentOwnershipValidation() {
+        ChatSession session = createDevSession();
+        KnowledgeBase otherKnowledgeBase = knowledgeBaseService.create(new CreateKnowledgeBaseRequest(
+                "Other Knowledge Base",
+                "Used by small-talk ownership tests",
+                "other-owner",
+                "other"
+        ));
+        saveDocument(otherKnowledgeBase.id(), "other-doc", DocumentStatus.AVAILABLE);
+
+        assertThatThrownBy(() -> chatService.ask(
+                session.id(),
+                "user-1",
+                "dev",
+                "你好",
+                "other-doc"
+        )).isInstanceOf(ForbiddenException.class)
+                .hasMessageContaining("无权使用该文档");
+
+        assertThat(chatMessageRepository.findBySessionIdOrderByCreatedAtAsc(session.id())).isEmpty();
+        verify(aiRateLimitService, never()).checkAiCallAllowed(anyString(), anyString());
         verify(fastApiRagClient, never()).askWithRerank(anyString(), anyString());
     }
 }

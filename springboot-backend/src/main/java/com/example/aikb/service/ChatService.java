@@ -20,6 +20,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Consumer;
 
@@ -36,10 +37,13 @@ import static com.example.aikb.common.RequestIdentity.requireUserId;
  * - 校验用户是否能访问会话所属知识库；
  * - 校验 documentId 是否属于当前会话的知识库；
  * - 保存 USER / ASSISTANT 消息；
+ * - 对有限小聊执行本地确定性回复；
  * - 调用 FastAPI RAG 并保存引用来源。
  */
 @Service
 public class ChatService {
+
+    private static final String SMALL_TALK_RETRIEVAL_MODE = "small_talk";
 
     /**
      * 知识库业务服务。
@@ -70,6 +74,9 @@ public class ChatService {
      */
     private final KnowledgeDocumentRepository documentRepository;
 
+    /** 对纯问候、感谢和能力询问执行整句白名单路由。 */
+    private final SmallTalkRouter smallTalkRouter;
+
     /**
      * FastAPI RAG 客户端。
      *
@@ -96,6 +103,7 @@ public class ChatService {
             ChatSessionRepository chatSessionRepository,
             ChatMessageRepository chatMessageRepository,
             KnowledgeDocumentRepository documentRepository,
+            SmallTalkRouter smallTalkRouter,
             FastApiRagClient fastApiRagClient,
             AiRateLimitService aiRateLimitService,
             ObjectMapper objectMapper
@@ -104,6 +112,7 @@ public class ChatService {
         this.chatSessionRepository = chatSessionRepository;
         this.chatMessageRepository = chatMessageRepository;
         this.documentRepository = documentRepository;
+        this.smallTalkRouter = smallTalkRouter;
         this.fastApiRagClient = fastApiRagClient;
         this.aiRateLimitService = aiRateLimitService;
         this.objectMapper = objectMapper;
@@ -238,6 +247,26 @@ public class ChatService {
                 documentId
         );
 
+        if (prepared.smallTalkReply().isPresent()) {
+            SmallTalkRouter.SmallTalkReply reply = prepared.smallTalkReply().orElseThrow();
+            saveAssistantMessage(
+                    prepared.session(),
+                    reply.answer(),
+                    null,
+                    SMALL_TALK_RETRIEVAL_MODE,
+                    null
+            );
+            return new FastApiRagResponse(
+                    question,
+                    reply.answer(),
+                    List.of(),
+                    SMALL_TALK_RETRIEVAL_MODE,
+                    null,
+                    null,
+                    null
+            );
+        }
+
         FastApiRagResponse response = fastApiRagClient.askWithRerank(question, documentId);
         saveAssistantMessage(
                 prepared.session(),
@@ -262,7 +291,10 @@ public class ChatService {
                                             String documentId) {
         ChatSession session = getRequiredSessionWithAccess(sessionId, userId, department);
         validateDocumentBelongsToSessionKnowledgeBase(documentId, session.knowledgeBaseId());
-        aiRateLimitService.checkAiCallAllowed(userId, "RAG_CHAT");
+        Optional<SmallTalkRouter.SmallTalkReply> smallTalkReply = smallTalkRouter.route(question);
+        if (smallTalkReply.isEmpty()) {
+            aiRateLimitService.checkAiCallAllowed(userId, "RAG_CHAT");
+        }
 
         ChatMessage userMessage = new ChatMessage(
                 UUID.randomUUID(),
@@ -275,13 +307,28 @@ public class ChatService {
                 Instant.now()
         );
         ChatMessage savedUserMessage = chatMessageRepository.save(userMessage);
-        return new StreamingAsk(session, savedUserMessage, question, documentId);
+        return new StreamingAsk(
+                session,
+                savedUserMessage,
+                question,
+                documentId,
+                smallTalkReply
+        );
     }
 
     /**
      * 消费 FastAPI NDJSON 事件，向浏览器转发状态和文本增量，并在完成后保存 AI 消息。
      */
     public void streamAnswer(StreamingAsk prepared, Consumer<JsonNode> browserEventConsumer) {
+        if (prepared.smallTalkReply().isPresent()) {
+            streamSmallTalkAnswer(
+                    prepared,
+                    prepared.smallTalkReply().orElseThrow(),
+                    browserEventConsumer
+            );
+            return;
+        }
+
         StringBuilder answer = new StringBuilder();
         JsonNode[] sources = {objectMapper.createArrayNode()};
         String[] retrievalMode = {null};
@@ -350,6 +397,30 @@ public class ChatService {
         browserEventConsumer.accept(doneEvent);
     }
 
+    private void streamSmallTalkAnswer(
+            StreamingAsk prepared,
+            SmallTalkRouter.SmallTalkReply reply,
+            Consumer<JsonNode> browserEventConsumer
+    ) {
+        ChatMessage assistantMessage = saveAssistantMessage(
+                prepared.session(),
+                reply.answer(),
+                null,
+                SMALL_TALK_RETRIEVAL_MODE,
+                null
+        );
+
+        var deltaEvent = objectMapper.createObjectNode();
+        deltaEvent.put("type", "delta");
+        deltaEvent.put("content", reply.answer());
+        browserEventConsumer.accept(deltaEvent);
+
+        var doneEvent = objectMapper.createObjectNode();
+        doneEvent.put("type", "done");
+        doneEvent.set("message", objectMapper.valueToTree(ChatMessageResponse.from(assistantMessage)));
+        browserEventConsumer.accept(doneEvent);
+    }
+
     private ChatMessage saveAssistantMessage(
             ChatSession session,
             String answer,
@@ -403,7 +474,8 @@ public class ChatService {
             ChatSession session,
             ChatMessage userMessage,
             String question,
-            String documentId
+            String documentId,
+            Optional<SmallTalkRouter.SmallTalkReply> smallTalkReply
     ) {
     }
 
