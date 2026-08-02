@@ -189,6 +189,61 @@ describe("application authentication state", () => {
     expect(model.chatStreamStage).toBe("completed");
   });
 
+  it("completes a small-talk stream without retrieval or source events", async () => {
+    const state = appOptions.data();
+    const model = {
+      ...state,
+      selectedSessionId: "session-1",
+      chatForm: {
+        knowledgeBaseId: "kb-1",
+        documentId: "doc-1",
+        title: "",
+        question: "你好"
+      },
+      messages: [],
+      setStatus: vi.fn(),
+      userQuery: vi.fn().mockReturnValue(""),
+      normalizeChatMessage: appOptions.methods.normalizeChatMessage,
+      requestNdjson: vi.fn(async (url, options, onEvent) => {
+        await onEvent({
+          type: "accepted",
+          message: {id: "user-1", role: "USER", content: "你好"}
+        });
+        await onEvent({type: "delta", content: "你好！我是知途 AI 伴学助手。"});
+        await onEvent({
+          type: "done",
+          message: {
+            id: "assistant-1",
+            role: "ASSISTANT",
+            content: "你好！我是知途 AI 伴学助手。",
+            sourcesJson: null,
+            retrievalMode: "small_talk"
+          }
+        });
+      })
+    };
+
+    await appOptions.methods.askQuestion.call(model);
+
+    expect(model.messages[0]).toMatchObject({
+      id: "user-1",
+      role: "user",
+      content: "你好",
+      optimistic: false
+    });
+    expect(model.messages[1]).toMatchObject({
+      id: "assistant-1",
+      role: "assistant",
+      content: "你好！我是知途 AI 伴学助手。",
+      sourcesJson: null,
+      retrievalMode: "small_talk",
+      streaming: false
+    });
+    expect(model.chatStreaming).toBe(false);
+    expect(model.chatStreamStage).toBe("completed");
+    expect(model.setStatus).toHaveBeenLastCalledWith("回复已完成并保存。");
+  });
+
   it("auto-fills extracted JD after analyzing an uploaded attachment", async () => {
     const state = appOptions.data();
     const file = new File(["fake-image"], "jd.png", {type: "image/png"});

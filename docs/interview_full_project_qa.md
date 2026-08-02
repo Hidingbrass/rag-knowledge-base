@@ -102,7 +102,8 @@ FAILED 记录不会作为可复用文档，因为失败文档没有可靠的向�
 ```text
 用户在前端选择会话和文档后发起提问。
 Spring Boot 校验当前用户是否能访问会话和知识库，并校验 documentId 是否属于当前知识库。
-校验通过后调用 FastAPI 的 Rerank RAG 接口。
+校验通过后，Spring Boot 先用有限整句白名单识别纯问候、感谢和能力询问；命中时返回固定回复并保存消息，不调用 AI 服务。
+未命中时才调用 FastAPI 的 Rerank RAG 接口。
 FastAPI 对问题做 Embedding，到 Qdrant 召回候选 Chunk，再调用 qwen3-rerank 做二次排序。
 如果最高 rerank_score 低于阈值，就拒答；否则把 top 片段拼入 Prompt，调用通义千问生成答案，并返回引用来源。
 Spring Boot 保存用户消息和助手消息到 MySQL。
@@ -141,6 +142,18 @@ vector_score 来自 Qdrant，表示向量相似度；rerank_score 来自 qwen3-r
 有些片段向量分数不一定最高，但可能更能直接回答问题。如果在 Rerank 前就用 vector min_score 删掉它，Rerank 就没有机会纠正粗召回排序。
 
 所以我先扩大候选召回，再把最终筛选交给 Rerank 和 rerank_min_score。
+```
+
+### 补充：为什么“你好”不走 RAG？
+
+回答：
+
+```text
+问候、感谢和能力询问不需要企业资料作为事实依据，把它们向量化后检索只会浪费调用并触发生硬拒答。
+
+我在 Spring Boot 正式会话入口增加了确定性整句路由：纯小聊直接使用固定回复并保存消息，不调用 FastAPI 或模型；其他消息继续走严格 RAG。
+
+这里不能简单判断是否包含“你好”。“你好，请总结这份资料”和“你好像没有回答问题”都包含相同字符，但有真实语义，必须继续进入 RAG。检索低置信时仍然拒答，不会静默切换到无引用的通用回答。
 ```
 
 ## 5. 权限和持久化
