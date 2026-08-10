@@ -105,6 +105,82 @@ class FastApiRagClientTests {
     }
 
     @Test
+    void classifyIntentShouldSendQuestionAndReadAuditFields() {
+        TestClient testClient = newTestClient();
+        testClient.server.expect(requestTo("http://fastapi.test/intent/classify"))
+                .andExpect(method(POST))
+                .andExpect(content().json("""
+                        {"question":"1+1 等于多少？"}
+                        """))
+                .andRespond(withSuccess("""
+                        {
+                          "intent":"OPEN_DOMAIN_CHAT",
+                          "confidence":0.98,
+                          "enterprise_knowledge":false,
+                          "reason_code":"open_domain",
+                          "decision_source":"classifier",
+                          "knowledge_scope":"PUBLIC",
+                          "operation":"ANSWER",
+                          "freshness":"STATIC",
+                          "tool_name":null,
+                          "missing_fields":[],
+                          "requires_confirmation":false,
+                          "model_usage":{
+                            "models":["qwen-flash"],
+                            "upstream_call_count":1,
+                            "retry_count":0,
+                            "prompt_tokens":20,
+                            "completion_tokens":10,
+                            "total_tokens":30,
+                            "estimated_cost_yuan":0
+                          }
+                        }
+                        """, MediaType.APPLICATION_JSON));
+
+        var response = testClient.client.classifyIntent("1+1 等于多少？");
+
+        assertThat(response.intent()).isEqualTo("OPEN_DOMAIN_CHAT");
+        assertThat(response.enterpriseKnowledge()).isFalse();
+        assertThat(response.knowledgeScope()).isEqualTo("PUBLIC");
+        assertThat(response.operation()).isEqualTo("ANSWER");
+        assertThat(response.freshness()).isEqualTo("STATIC");
+        verify(testClient.logService).recordFastApiCall(
+                eq("INTENT_CLASSIFY"),
+                eq("/intent/classify"),
+                eq(true),
+                anyLong(),
+                eq(null),
+                eq(response.modelUsage())
+        );
+        testClient.server.verify();
+    }
+
+    @Test
+    void nonRagChatShouldSendControlledMode() {
+        TestClient testClient = newTestClient();
+        testClient.server.expect(requestTo("http://fastapi.test/chat"))
+                .andExpect(method(POST))
+                .andExpect(content().json("""
+                        {"question":"帮我查天气","mode":"tool_call"}
+                        """))
+                .andRespond(withSuccess("""
+                        {"answer":"请告诉我城市。"}
+                        """, MediaType.APPLICATION_JSON));
+
+        var response = testClient.client.chatWithoutKnowledgeBase("帮我查天气", "tool_call");
+
+        assertThat(response.answer()).isEqualTo("请告诉我城市。");
+        verify(testClient.logService).recordFastApiCall(
+                eq("NON_RAG_CHAT"),
+                eq("/chat"),
+                eq(true),
+                anyLong(),
+                eq(null)
+        );
+        testClient.server.verify();
+    }
+
+    @Test
     void analyzeJobShouldRecordSuccessfulFastApiCall() {
         TestClient testClient = newTestClient();
         testClient.server.expect(requestTo("http://fastapi.test/job/analyze"))

@@ -4,7 +4,7 @@
 这个文件专门防止以后有人在 schema 里重新写死默认值，导致评测脚本和接口参数不一致。
 """
 
-from app.core.config import settings
+from app.core.config import get_probability_env, settings
 from app.schemas.rag import RagChatRequest, RerankRagChatRequest
 import pytest
 from pydantic import ValidationError
@@ -59,3 +59,10 @@ def test_rerank_rag_request_rejects_invalid_sparse_limit():
             question="什么是 RAG？",
             sparse_limit=0,
         )
+
+
+def test_probability_config_rejects_out_of_range_value(monkeypatch):
+    monkeypatch.setenv("TEST_PROBABILITY", "1.1")
+
+    with pytest.raises(ValueError, match="0 到 1"):
+        get_probability_env("TEST_PROBABILITY", 0.8)

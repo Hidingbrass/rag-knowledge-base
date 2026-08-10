@@ -48,6 +48,9 @@ public class ChatMessage {
 
     private Double rerankElapsedSeconds;
 
+    @Column(columnDefinition = "TEXT")
+    private String routingDecisionJson;
+
     @Column(nullable = false)
     private Instant createdAt;
 
@@ -65,6 +68,30 @@ public class ChatMessage {
             Double rerankElapsedSeconds,
             Instant createdAt
     ) {
+        this(
+                id,
+                sessionId,
+                role,
+                content,
+                sourcesJson,
+                retrievalMode,
+                rerankElapsedSeconds,
+                null,
+                createdAt
+        );
+    }
+
+    public ChatMessage(
+            UUID id,
+            UUID sessionId,
+            MessageRole role,
+            String content,
+            String sourcesJson,
+            String retrievalMode,
+            Double rerankElapsedSeconds,
+            String routingDecisionJson,
+            Instant createdAt
+    ) {
         this.id = id;
         this.sessionId = sessionId;
         this.role = role;
@@ -72,6 +99,7 @@ public class ChatMessage {
         this.sourcesJson = sourcesJson;
         this.retrievalMode = retrievalMode;
         this.rerankElapsedSeconds = rerankElapsedSeconds;
+        this.routingDecisionJson = routingDecisionJson;
         this.createdAt = createdAt;
     }
 
@@ -101,6 +129,10 @@ public class ChatMessage {
 
     public Double rerankElapsedSeconds() {
         return rerankElapsedSeconds;
+    }
+
+    public String routingDecisionJson() {
+        return routingDecisionJson;
     }
 
     public Instant createdAt() {

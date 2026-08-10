@@ -54,6 +54,9 @@ fastapi:
   default-sparse-limit: 6
 
 ai:
+  intent-routing:
+    # 与 FastAPI INTENT_CLASSIFIER_MIN_CONFIDENCE 使用同一个环境变量，避免双服务阈值漂移。
+    min-confidence: ${INTENT_CLASSIFIER_MIN_CONFIDENCE:0.80}
   rate-limit:
     enabled: ${AI_RATE_LIMIT_ENABLED:true}
     per-minute: ${AI_RATE_LIMIT_PER_MINUTE:5}

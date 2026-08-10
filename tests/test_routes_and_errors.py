@@ -38,6 +38,7 @@ def test_original_routes_are_registered():
         "/health",
         "/qdrant/health",
         "/chat",
+        "/intent/classify",
         "/documents/preview",
         "/documents/index",
         "/documents/{document_id}",

@@ -3,6 +3,8 @@ package com.example.aikb.service;
 import com.example.aikb.client.FastApiRagClient;
 import com.example.aikb.dto.chat.CreateChatSessionRequest;
 import com.example.aikb.dto.fastapi.FastApiRagResponse;
+import com.example.aikb.dto.fastapi.FastApiChatResponse;
+import com.example.aikb.dto.fastapi.FastApiIntentClassificationResponse;
 import com.example.aikb.dto.fastapi.FastApiSource;
 import com.example.aikb.dto.knowledgebase.CreateKnowledgeBaseRequest;
 import com.example.aikb.entity.ChatMessage;
@@ -145,6 +147,7 @@ class ChatServiceTests {
         assertThat(messages.get(1).rerankElapsedSeconds()).isNull();
 
         verify(aiRateLimitService, never()).checkAiCallAllowed(anyString(), anyString());
+        verify(fastApiRagClient, never()).classifyIntent(anyString());
         verify(fastApiRagClient, never()).askWithRerank(anyString(), anyString());
     }
 
@@ -183,7 +186,352 @@ class ChatServiceTests {
         assertThat(response).isSameAs(fastApiResponse);
         assertThat(response.retrievalMode()).isEqualTo("rerank");
         verify(aiRateLimitService).checkAiCallAllowed("user-1", "RAG_CHAT");
+        verify(fastApiRagClient, never()).classifyIntent(anyString());
         verify(fastApiRagClient).askWithRerank(question, "mixed-question-doc");
+    }
+
+    @Test
+    void openDomainQuestionShouldUseClassifierThenNonRagChat() {
+        KnowledgeBase knowledgeBase = createDevKnowledgeBase();
+        ChatSession session = chatService.createSession(new CreateChatSessionRequest(
+                knowledgeBase.id(),
+                "user-1",
+                "dev",
+                "开放域会话"
+        ));
+        saveDocument(knowledgeBase.id(), "open-domain-doc", DocumentStatus.AVAILABLE);
+
+        String question = "1+1 等于多少？";
+        when(fastApiRagClient.classifyIntent(question)).thenReturn(
+                new FastApiIntentClassificationResponse(
+                        "OPEN_DOMAIN_CHAT",
+                        0.98,
+                        false,
+                        "open_domain",
+                        "classifier",
+                        null
+                )
+        );
+        when(fastApiRagClient.chatWithoutKnowledgeBase(question, "open_domain_chat"))
+                .thenReturn(new FastApiChatResponse("1+1 等于 2。", null));
+
+        FastApiRagResponse response = chatService.ask(
+                session.id(),
+                "user-1",
+                "dev",
+                question,
+                "open-domain-doc"
+        );
+
+        assertThat(response.answer()).isEqualTo("1+1 等于 2。");
+        assertThat(response.sources()).isEmpty();
+        assertThat(response.retrievalMode()).isEqualTo("open_domain_chat");
+        List<ChatMessage> messages = chatMessageRepository
+                .findBySessionIdOrderByCreatedAtAsc(session.id());
+        assertThat(messages).hasSize(2);
+        assertThat(messages.get(1).sourcesJson()).isNull();
+        assertThat(messages.get(1).retrievalMode()).isEqualTo("open_domain_chat");
+
+        verify(aiRateLimitService).checkAiCallAllowed("user-1", "RAG_CHAT");
+        verify(fastApiRagClient).classifyIntent(question);
+        verify(fastApiRagClient).chatWithoutKnowledgeBase(question, "open_domain_chat");
+        verify(fastApiRagClient, never()).askWithRerank(anyString(), anyString());
+    }
+
+    @Test
+    void enterpriseFlagShouldOverrideOpenDomainLabelAndUseRag() {
+        KnowledgeBase knowledgeBase = createDevKnowledgeBase();
+        ChatSession session = chatService.createSession(new CreateChatSessionRequest(
+                knowledgeBase.id(),
+                "user-1",
+                "dev",
+                "企业知识保护会话"
+        ));
+        saveDocument(knowledgeBase.id(), "enterprise-doc", DocumentStatus.AVAILABLE);
+
+        String question = "研发预算是多少？";
+        when(fastApiRagClient.classifyIntent(question)).thenReturn(
+                new FastApiIntentClassificationResponse(
+                        "OPEN_DOMAIN_CHAT",
+                        0.99,
+                        true,
+                        "enterprise_knowledge",
+                        "enterprise_guard",
+                        null
+                )
+        );
+        FastApiRagResponse ragResponse = new FastApiRagResponse(
+                question,
+                "预算以资料中的审批记录为准 [1]。",
+                List.of(),
+                "rerank",
+                "hybrid",
+                null,
+                0.1
+        );
+        when(fastApiRagClient.askWithRerank(question, "enterprise-doc"))
+                .thenReturn(ragResponse);
+
+        FastApiRagResponse response = chatService.ask(
+                session.id(),
+                "user-1",
+                "dev",
+                question,
+                "enterprise-doc"
+        );
+
+        assertThat(response).isSameAs(ragResponse);
+        verify(fastApiRagClient).classifyIntent(question);
+        verify(fastApiRagClient).askWithRerank(question, "enterprise-doc");
+        verify(fastApiRagClient, never()).chatWithoutKnowledgeBase(anyString(), anyString());
+    }
+
+    @Test
+    void classifierFailureShouldConservativelyUseRag() {
+        KnowledgeBase knowledgeBase = createDevKnowledgeBase();
+        ChatSession session = chatService.createSession(new CreateChatSessionRequest(
+                knowledgeBase.id(),
+                "user-1",
+                "dev",
+                "分类降级会话"
+        ));
+        saveDocument(knowledgeBase.id(), "fallback-doc", DocumentStatus.AVAILABLE);
+
+        String question = "解释一下这个概念";
+        when(fastApiRagClient.classifyIntent(question))
+                .thenThrow(new BusinessException("classifier unavailable"));
+        FastApiRagResponse ragResponse = new FastApiRagResponse(
+                question,
+                "资料不足，无法基于资料回答。",
+                List.of(),
+                "rerank",
+                "hybrid",
+                null,
+                null
+        );
+        when(fastApiRagClient.askWithRerank(question, "fallback-doc"))
+                .thenReturn(ragResponse);
+
+        FastApiRagResponse response = chatService.ask(
+                session.id(),
+                "user-1",
+                "dev",
+                question,
+                "fallback-doc"
+        );
+
+        assertThat(response).isSameAs(ragResponse);
+        verify(fastApiRagClient).askWithRerank(question, "fallback-doc");
+        verify(fastApiRagClient, never()).chatWithoutKnowledgeBase(anyString(), anyString());
+    }
+
+    @Test
+    void streamToolIntentShouldPersistAuditableNonRagMode() {
+        KnowledgeBase knowledgeBase = createDevKnowledgeBase();
+        ChatSession session = chatService.createSession(new CreateChatSessionRequest(
+                knowledgeBase.id(),
+                "user-1",
+                "dev",
+                "工具意图会话"
+        ));
+        saveDocument(knowledgeBase.id(), "tool-doc", DocumentStatus.AVAILABLE);
+
+        String question = "帮我查询 GitHub 仓库信息";
+        when(fastApiRagClient.classifyIntent(question)).thenReturn(
+                new FastApiIntentClassificationResponse(
+                        "TOOL_CALL",
+                        0.96,
+                        false,
+                        "tool_request",
+                        "classifier",
+                        null
+                )
+        );
+        when(fastApiRagClient.chatWithoutKnowledgeBase(question, "tool_call"))
+                .thenReturn(new FastApiChatResponse("请告诉我需要查询的城市。", null));
+
+        ChatService.StreamingAsk prepared = chatService.prepareStreamingAsk(
+                session.id(),
+                "user-1",
+                "dev",
+                question,
+                "tool-doc"
+        );
+        List<JsonNode> events = new java.util.ArrayList<>();
+        chatService.streamAnswer(prepared, events::add);
+
+        assertThat(events).extracting(event -> event.path("type").asText())
+                .containsExactly("status", "delta", "done");
+        assertThat(events.get(2).path("message").path("retrievalMode").asText())
+                .isEqualTo("tool_call");
+        List<ChatMessage> messages = chatMessageRepository
+                .findBySessionIdOrderByCreatedAtAsc(session.id());
+        assertThat(messages.get(1).retrievalMode()).isEqualTo("tool_call");
+        assertThat(messages.get(1).sourcesJson()).isNull();
+        verify(fastApiRagClient, never()).streamAskWithRerank(anyString(), anyString(), any());
+    }
+
+    @Test
+    void realtimeQueryShouldReturnTransparentUnavailableAnswerWithoutAiCalls() {
+        KnowledgeBase knowledgeBase = createDevKnowledgeBase();
+        ChatSession session = chatService.createSession(new CreateChatSessionRequest(
+                knowledgeBase.id(),
+                "user-1",
+                "dev",
+                "实时查询门禁会话"
+        ));
+        saveDocument(knowledgeBase.id(), "realtime-doc", DocumentStatus.AVAILABLE);
+
+        FastApiRagResponse response = chatService.ask(
+                session.id(),
+                "user-1",
+                "dev",
+                "今天合肥天气怎么样？",
+                "realtime-doc"
+        );
+
+        assertThat(response.retrievalMode()).isEqualTo("realtime_tool_unavailable");
+        assertThat(response.sources()).isEmpty();
+        assertThat(response.answer()).contains("实时数据工具");
+        List<ChatMessage> messages = chatMessageRepository
+                .findBySessionIdOrderByCreatedAtAsc(session.id());
+        assertThat(messages.get(1).routingDecisionJson())
+                .contains("realtime_rule", "REALTIME_TOOL_UNAVAILABLE");
+
+        verify(aiRateLimitService, never()).checkAiCallAllowed(anyString(), anyString());
+        verify(fastApiRagClient, never()).classifyIntent(anyString());
+        verify(fastApiRagClient, never()).askWithRerank(anyString(), anyString());
+        verify(fastApiRagClient, never()).chatWithoutKnowledgeBase(anyString(), anyString());
+    }
+
+    @Test
+    void destructiveActionShouldBeBlockedWithoutClassifierRagOrToolCall() {
+        KnowledgeBase knowledgeBase = createDevKnowledgeBase();
+        ChatSession session = chatService.createSession(new CreateChatSessionRequest(
+                knowledgeBase.id(),
+                "user-1",
+                "dev",
+                "危险操作门禁会话"
+        ));
+        saveDocument(knowledgeBase.id(), "write-action-doc", DocumentStatus.AVAILABLE);
+
+        FastApiRagResponse response = chatService.ask(
+                session.id(),
+                "user-1",
+                "dev",
+                "帮我删除这份知识库文档。",
+                "write-action-doc"
+        );
+
+        assertThat(response.retrievalMode()).isEqualTo("destructive_action_blocked");
+        assertThat(response.sources()).isEmpty();
+        assertThat(response.answer()).contains("不会执行");
+        List<ChatMessage> messages = chatMessageRepository
+                .findBySessionIdOrderByCreatedAtAsc(session.id());
+        assertThat(messages.get(1).routingDecisionJson())
+                .contains("write_action_guard", "DESTRUCTIVE_ACTION_BLOCKED");
+
+        verify(aiRateLimitService, never()).checkAiCallAllowed(anyString(), anyString());
+        verify(fastApiRagClient, never()).classifyIntent(anyString());
+        verify(fastApiRagClient, never()).askWithRerank(anyString(), anyString());
+        verify(fastApiRagClient, never()).chatWithoutKnowledgeBase(anyString(), anyString());
+    }
+
+    @Test
+    void classifierWriteOperationShouldBeBlockedBeforeEnterpriseFallback() {
+        KnowledgeBase knowledgeBase = createDevKnowledgeBase();
+        ChatSession session = chatService.createSession(new CreateChatSessionRequest(
+                knowledgeBase.id(),
+                "user-1",
+                "dev",
+                "分类写操作门禁会话"
+        ));
+        saveDocument(knowledgeBase.id(), "classified-write-doc", DocumentStatus.AVAILABLE);
+
+        String question = "处理客户合同变更";
+        when(fastApiRagClient.classifyIntent(question)).thenReturn(
+                new FastApiIntentClassificationResponse(
+                        "TOOL_CALL",
+                        0.96,
+                        true,
+                        "tool_request",
+                        "write_action_guard",
+                        "ENTERPRISE",
+                        "WRITE_TOOL",
+                        "STATIC",
+                        null,
+                        List.of(),
+                        true,
+                        null
+                )
+        );
+
+        FastApiRagResponse response = chatService.ask(
+                session.id(),
+                "user-1",
+                "dev",
+                question,
+                "classified-write-doc"
+        );
+
+        assertThat(response.retrievalMode()).isEqualTo("destructive_action_blocked");
+        assertThat(response.answer()).contains("不会执行");
+        List<ChatMessage> messages = chatMessageRepository
+                .findBySessionIdOrderByCreatedAtAsc(session.id());
+        assertThat(messages.get(1).routingDecisionJson())
+                .contains("WRITE_TOOL", "requires_confirmation", "0.96");
+        verify(fastApiRagClient).classifyIntent(question);
+        verify(fastApiRagClient, never()).askWithRerank(anyString(), anyString());
+        verify(fastApiRagClient, never()).chatWithoutKnowledgeBase(anyString(), anyString());
+    }
+
+    @Test
+    void classifierReadToolWithMissingFieldsShouldAskForClarification() {
+        KnowledgeBase knowledgeBase = createDevKnowledgeBase();
+        ChatSession session = chatService.createSession(new CreateChatSessionRequest(
+                knowledgeBase.id(),
+                "user-1",
+                "dev",
+                "工具缺参澄清会话"
+        ));
+        saveDocument(knowledgeBase.id(), "classified-read-doc", DocumentStatus.AVAILABLE);
+
+        String question = "查询外部接口状态";
+        when(fastApiRagClient.classifyIntent(question)).thenReturn(
+                new FastApiIntentClassificationResponse(
+                        "TOOL_CALL",
+                        0.94,
+                        false,
+                        "tool_request",
+                        "classifier",
+                        "PUBLIC",
+                        "READ_TOOL",
+                        "REALTIME",
+                        null,
+                        List.of("url"),
+                        false,
+                        null
+                )
+        );
+        when(fastApiRagClient.chatWithoutKnowledgeBase(question, "clarification"))
+                .thenReturn(new FastApiChatResponse("请提供需要查询的接口地址。", null));
+
+        FastApiRagResponse response = chatService.ask(
+                session.id(),
+                "user-1",
+                "dev",
+                question,
+                "classified-read-doc"
+        );
+
+        assertThat(response.retrievalMode()).isEqualTo("clarification");
+        assertThat(response.answer()).contains("接口地址");
+        List<ChatMessage> messages = chatMessageRepository
+                .findBySessionIdOrderByCreatedAtAsc(session.id());
+        assertThat(messages.get(1).routingDecisionJson())
+                .contains("READ_TOOL", "url", "CLARIFICATION");
+        verify(fastApiRagClient).chatWithoutKnowledgeBase(question, "clarification");
+        verify(fastApiRagClient, never()).askWithRerank(anyString(), anyString());
     }
 
     @Test
