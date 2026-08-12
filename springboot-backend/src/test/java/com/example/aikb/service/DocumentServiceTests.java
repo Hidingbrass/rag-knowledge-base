@@ -25,6 +25,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.never;
 
 /**
  * DocumentService 集成测试。
@@ -149,6 +150,38 @@ class DocumentServiceTests {
         ))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("支持 PDF、Markdown、Word（DOCX）和 TXT 文件");
+    }
+
+    @Test
+    void deleteDocumentShouldRecheckOwnershipAndDeleteVectorBeforeBusinessRecord() {
+        KnowledgeBase knowledgeBase = createKnowledgeBase();
+        when(fastApiRagClient.indexDocument(any())).thenReturn(new FastApiDocumentIndexResponse(
+                "delete-doc", "delete.md", 1, "rag_chunks", "ignored"
+        ));
+        documentService.indexDocument(
+                knowledgeBase.id(), "user-1", "研发部",
+                documentFile("delete.md", "text/markdown", "delete test")
+        );
+
+        String filename = documentService.deleteDocument(
+                knowledgeBase.id(), "user-1", "研发部", "delete-doc"
+        );
+
+        assertThat(filename).isEqualTo("delete.md");
+        assertThat(documentService.listByKnowledgeBase(
+                knowledgeBase.id(), "user-1", "研发部"
+        )).isEmpty();
+        verify(fastApiRagClient).deleteDocument("delete-doc");
+    }
+
+    @Test
+    void deleteDocumentShouldRejectNonOwnerBeforeVectorDeletion() {
+        KnowledgeBase knowledgeBase = createKnowledgeBase();
+
+        assertThatThrownBy(() -> documentService.deleteDocument(
+                knowledgeBase.id(), "user-2", "研发部", "missing"
+        )).hasMessageContaining("无权访问知识库");
+        verify(fastApiRagClient, never()).deleteDocument(any());
     }
 
     private KnowledgeBase createKnowledgeBase() {

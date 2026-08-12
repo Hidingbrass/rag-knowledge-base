@@ -1,6 +1,7 @@
 package com.example.aikb.config;
 
 import com.example.aikb.security.JwtAuthenticationFilter;
+import jakarta.servlet.DispatcherType;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -47,6 +48,9 @@ public class SecurityConfig {
                         })
                 )
                 .authorizeHttpRequests(auth -> {
+                    // StreamingResponseBody 会在初始 JWT 请求通过后触发容器内部 ASYNC 分派。
+                    // 此处分派没有新的客户端身份输入，只负责继续写出已授权请求的响应流。
+                    auth.dispatcherTypeMatchers(DispatcherType.ASYNC).permitAll();
                     auth.requestMatchers(
                             "/",
                             "/index.html",

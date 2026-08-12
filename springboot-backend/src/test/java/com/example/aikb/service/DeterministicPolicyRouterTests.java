@@ -13,7 +13,6 @@ class DeterministicPolicyRouterTests {
 
     @ParameterizedTest
     @ValueSource(strings = {
-            "帮我删除这份知识库文档。",
             "请把这个账号注销",
             "立即发送这封邮件",
             "Delete this document now"
@@ -29,17 +28,34 @@ class DeterministicPolicyRouterTests {
 
     @ParameterizedTest
     @ValueSource(strings = {
-            "今天合肥天气怎么样？",
-            "现在美元汇率是多少？",
-            "What is the weather today?"
+            "帮我删除这份知识库文档。",
+            "把当前选中文档移除"
     })
-    void shouldReturnTransparentUnavailableAnswerForRealtimeQueries(String question) {
+    void shouldRouteOnlyCurrentDocumentDeletionToConfirmation(String question) {
         var decision = router.route(question).orElseThrow();
 
+        assertThat(decision.route()).isEqualTo(DeterministicPolicyRouter.PolicyRoute.WRITE_TOOL);
+        assertThat(decision.auditMode()).isEqualTo("tool_confirmation_required");
+        assertThat(decision.toolName()).isEqualTo("delete_knowledge_document");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "今天合肥天气怎么样？"
+    })
+    void shouldRouteCurrentWeatherToAuthorizedReadTool(String question) {
+        var decision = router.route(question).orElseThrow();
+
+        assertThat(decision.route()).isEqualTo(DeterministicPolicyRouter.PolicyRoute.READ_TOOL);
+        assertThat(decision.toolName()).isEqualTo("get_current_weather");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"现在美元汇率是多少？", "查询明天上海到北京的航班状态。"})
+    void shouldKeepUnsupportedRealtimeQueriesUnavailable(String question) {
+        var decision = router.route(question).orElseThrow();
         assertThat(decision.route()).isEqualTo(DeterministicPolicyRouter.PolicyRoute.DIRECT);
         assertThat(decision.auditMode()).isEqualTo("realtime_tool_unavailable");
-        assertThat(decision.reasonCode()).isEqualTo("realtime_rule");
-        assertThat(decision.answer()).contains("实时数据工具");
     }
 
     @ParameterizedTest

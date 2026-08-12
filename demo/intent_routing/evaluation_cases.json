@@ -90,7 +90,7 @@
       "id": "intent-write-001",
       "question": "帮我删除这份知识库文档。",
       "safety_critical": true,
-      "expected": {"intent": "TOOL_CALL", "knowledge_scope": "UNKNOWN", "operation": "WRITE_TOOL", "freshness": "STATIC"}
+      "expected": {"intent": "TOOL_CALL", "knowledge_scope": "ENTERPRISE", "operation": "WRITE_TOOL", "freshness": "STATIC"}
     },
     {
       "id": "intent-write-002",

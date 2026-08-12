@@ -10,8 +10,10 @@ import com.example.aikb.config.IntentRoutingProperties;
 import com.example.aikb.entity.ChatMessage;
 import com.example.aikb.entity.ChatSession;
 import com.example.aikb.entity.KnowledgeDocument;
+import com.example.aikb.entity.ToolAction;
 import com.example.aikb.enums.DocumentStatus;
 import com.example.aikb.enums.MessageRole;
+import com.example.aikb.enums.ToolOperation;
 import com.example.aikb.exception.BusinessException;
 import com.example.aikb.exception.ForbiddenException;
 import com.example.aikb.repository.ChatMessageRepository;
@@ -19,6 +21,12 @@ import com.example.aikb.repository.ChatSessionRepository;
 import com.example.aikb.repository.KnowledgeDocumentRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.example.aikb.tool.AuthorizedToolRegistry;
+import com.example.aikb.tool.CurrentWeatherTool;
+import com.example.aikb.tool.ToolExecutionContext;
+import com.example.aikb.tool.ToolExecutionResult;
+import com.example.aikb.tool.WeatherLocationParser;
 import org.springframework.stereotype.Service;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,6 +34,7 @@ import org.slf4j.LoggerFactory;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Map;
 import java.util.UUID;
 import java.util.function.Consumer;
 
@@ -108,6 +117,11 @@ public class ChatService {
      */
     private final ObjectMapper objectMapper;
 
+    /** 固定白名单工具注册表与写操作确认服务。 */
+    private final AuthorizedToolRegistry toolRegistry;
+    private final WeatherLocationParser weatherLocationParser;
+    private final ToolActionService toolActionService;
+
     public ChatService(
             KnowledgeBaseService knowledgeBaseService,
             ChatSessionRepository chatSessionRepository,
@@ -118,7 +132,10 @@ public class ChatService {
             IntentRoutingProperties intentRoutingProperties,
             FastApiRagClient fastApiRagClient,
             AiRateLimitService aiRateLimitService,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            AuthorizedToolRegistry toolRegistry,
+            WeatherLocationParser weatherLocationParser,
+            ToolActionService toolActionService
     ) {
         this.knowledgeBaseService = knowledgeBaseService;
         this.chatSessionRepository = chatSessionRepository;
@@ -130,6 +147,9 @@ public class ChatService {
         this.fastApiRagClient = fastApiRagClient;
         this.aiRateLimitService = aiRateLimitService;
         this.objectMapper = objectMapper;
+        this.toolRegistry = toolRegistry;
+        this.weatherLocationParser = weatherLocationParser;
+        this.toolActionService = toolActionService;
     }
 
     /**
@@ -261,6 +281,13 @@ public class ChatService {
                 documentId
         );
 
+        if (prepared.routeDecision().route() == ChatRoute.READ_TOOL) {
+            return executeReadTool(prepared).response();
+        }
+        if (prepared.routeDecision().route() == ChatRoute.WRITE_TOOL_CONFIRMATION) {
+            return stageWriteToolConfirmation(prepared).response();
+        }
+
         if (prepared.routeDecision().directAnswer() != null) {
             String answer = prepared.routeDecision().directAnswer();
             saveAssistantMessage(
@@ -322,6 +349,7 @@ public class ChatService {
                     reply.intent().name().toLowerCase(java.util.Locale.ROOT),
                     null,
                     false,
+                    null,
                     null
             );
         } else {
@@ -352,6 +380,8 @@ public class ChatService {
         return new StreamingAsk(
                 session,
                 savedUserMessage,
+                requireUserId(userId),
+                requireDepartment(department),
                 question,
                 documentId,
                 routeDecision
@@ -362,6 +392,14 @@ public class ChatService {
      * 消费 FastAPI NDJSON 事件，向浏览器转发状态和文本增量，并在完成后保存 AI 消息。
      */
     public void streamAnswer(StreamingAsk prepared, Consumer<JsonNode> browserEventConsumer) {
+        if (prepared.routeDecision().route() == ChatRoute.READ_TOOL) {
+            streamToolResult(executeReadTool(prepared), browserEventConsumer);
+            return;
+        }
+        if (prepared.routeDecision().route() == ChatRoute.WRITE_TOOL_CONFIRMATION) {
+            streamToolResult(stageWriteToolConfirmation(prepared), browserEventConsumer);
+            return;
+        }
         if (prepared.routeDecision().directAnswer() != null) {
             streamDirectAnswer(
                     prepared,
@@ -470,6 +508,81 @@ public class ChatService {
         browserEventConsumer.accept(doneEvent);
     }
 
+    private ToolAnswer executeReadTool(StreamingAsk prepared) {
+        String toolName = prepared.routeDecision().toolName();
+        if (!CurrentWeatherTool.NAME.equals(toolName)) {
+            throw new BusinessException("当前只授权了天气只读工具");
+        }
+        Optional<String> city = weatherLocationParser.parse(prepared.question());
+        if (city.isEmpty()) {
+            String answer = "请告诉我需要查询天气的城市，例如“今天合肥天气怎么样？”。";
+            ChatMessage message = saveAssistantMessage(
+                    prepared.session(), answer, null, "tool_clarification", null,
+                    toRoutingDecisionJson(prepared.routeDecision(), null, Map.of("missing_fields", List.of("city")))
+            );
+            return new ToolAnswer(
+                    new FastApiRagResponse(prepared.question(), answer, List.of(),
+                            "tool_clarification", null, null, null),
+                    message
+            );
+        }
+
+        ObjectNode arguments = objectMapper.createObjectNode();
+        arguments.put("city", city.orElseThrow());
+        ToolExecutionResult result = toolRegistry.execute(
+                toolName,
+                ToolOperation.READ,
+                new ToolExecutionContext(prepared.userId(), prepared.department(), prepared.session().id()),
+                arguments
+        );
+        ChatMessage message = saveAssistantMessage(
+                prepared.session(), result.answer(), null, "tool_read", null,
+                toRoutingDecisionJson(prepared.routeDecision(), null, result.auditData())
+        );
+        return new ToolAnswer(
+                new FastApiRagResponse(prepared.question(), result.answer(), List.of(),
+                        "tool_read", null, null, null),
+                message
+        );
+    }
+
+    private ToolAnswer stageWriteToolConfirmation(StreamingAsk prepared) {
+        UUID assistantMessageId = UUID.randomUUID();
+        ToolActionService.StagedToolAction staged = toolActionService.stageDocumentDeletion(
+                prepared.session(),
+                prepared.userId(),
+                prepared.department(),
+                prepared.documentId(),
+                assistantMessageId
+        );
+        ChatMessage message = saveAssistantMessage(
+                assistantMessageId,
+                prepared.session(),
+                staged.prompt(),
+                null,
+                "tool_confirmation_required",
+                null,
+                toRoutingDecisionJson(prepared.routeDecision(), staged.action(), Map.of())
+        );
+        return new ToolAnswer(
+                new FastApiRagResponse(prepared.question(), staged.prompt(), List.of(),
+                        "tool_confirmation_required", null, null, null),
+                message
+        );
+    }
+
+    private void streamToolResult(ToolAnswer answer, Consumer<JsonNode> browserEventConsumer) {
+        var deltaEvent = objectMapper.createObjectNode();
+        deltaEvent.put("type", "delta");
+        deltaEvent.put("content", answer.response().answer());
+        browserEventConsumer.accept(deltaEvent);
+
+        var doneEvent = objectMapper.createObjectNode();
+        doneEvent.put("type", "done");
+        doneEvent.set("message", objectMapper.valueToTree(ChatMessageResponse.from(answer.message())));
+        browserEventConsumer.accept(doneEvent);
+    }
+
     private ChatRouteDecision decideRoute(String question) {
         try {
             FastApiIntentClassificationResponse classification = fastApiRagClient.classifyIntent(question);
@@ -497,6 +610,9 @@ public class ChatService {
             if ("READ_TOOL".equals(classification.operation())) {
                 if (!classification.missingFields().isEmpty()) {
                     return ChatRouteDecision.classified(ChatRoute.CLARIFICATION, classification);
+                }
+                if (CurrentWeatherTool.NAME.equals(classification.toolName())) {
+                    return ChatRouteDecision.classified(ChatRoute.READ_TOOL, classification);
                 }
                 return fromPolicyDecision(
                         deterministicPolicyRouter.realtimeToolUnavailable(
@@ -562,6 +678,30 @@ public class ChatService {
                     null
             );
         }
+        if (decision.route() == DeterministicPolicyRouter.PolicyRoute.READ_TOOL) {
+            return new ChatRouteDecision(
+                    ChatRoute.READ_TOOL,
+                    null,
+                    "deterministic_policy",
+                    decision.reasonCode(),
+                    null,
+                    false,
+                    classification,
+                    decision.toolName()
+            );
+        }
+        if (decision.route() == DeterministicPolicyRouter.PolicyRoute.WRITE_TOOL) {
+            return new ChatRouteDecision(
+                    ChatRoute.WRITE_TOOL_CONFIRMATION,
+                    null,
+                    "deterministic_policy",
+                    decision.reasonCode(),
+                    null,
+                    true,
+                    classification,
+                    decision.toolName()
+            );
+        }
         ChatRoute route = switch (decision.auditMode()) {
             case "destructive_action_blocked" -> ChatRoute.DESTRUCTIVE_ACTION_BLOCKED;
             case "realtime_tool_unavailable" -> ChatRoute.REALTIME_TOOL_UNAVAILABLE;
@@ -576,7 +716,8 @@ public class ChatService {
                 decision.reasonCode(),
                 classification == null ? null : classification.confidence(),
                 classification == null ? false : classification.enterpriseKnowledge(),
-                classification
+                classification,
+                decision.toolName()
         );
     }
 
@@ -647,8 +788,23 @@ public class ChatService {
             Double rerankElapsedSeconds,
             String routingDecisionJson
     ) {
+        return saveAssistantMessage(
+                UUID.randomUUID(), session, answer, sourcesJson, retrievalMode,
+                rerankElapsedSeconds, routingDecisionJson
+        );
+    }
+
+    private ChatMessage saveAssistantMessage(
+            UUID messageId,
+            ChatSession session,
+            String answer,
+            String sourcesJson,
+            String retrievalMode,
+            Double rerankElapsedSeconds,
+            String routingDecisionJson
+    ) {
         ChatMessage assistantMessage = new ChatMessage(
-                UUID.randomUUID(),
+                messageId,
                 session.id(),
                 MessageRole.ASSISTANT,
                 answer,
@@ -691,6 +847,14 @@ public class ChatService {
     }
 
     private String toRoutingDecisionJson(ChatRouteDecision decision) {
+        return toRoutingDecisionJson(decision, null, Map.of());
+    }
+
+    private String toRoutingDecisionJson(
+            ChatRouteDecision decision,
+            ToolAction action,
+            Map<String, ?> toolResult
+    ) {
         try {
             var audit = objectMapper.createObjectNode();
             audit.put("route", decision.route().name());
@@ -717,6 +881,19 @@ public class ChatService {
                 audit.put("requires_confirmation", classification.requiresConfirmation());
             } else {
                 addDeterministicRoutingAttributes(audit, decision.route());
+            }
+            if (decision.toolName() != null) {
+                audit.put("tool_name", decision.toolName());
+            }
+            if (action != null) {
+                ObjectNode actionAudit = audit.putObject("tool_action");
+                actionAudit.put("id", action.id().toString());
+                actionAudit.put("tool_name", action.toolName());
+                actionAudit.put("status", action.status().name());
+                actionAudit.put("expires_at", action.expiresAt().toString());
+            }
+            if (toolResult != null && !toolResult.isEmpty()) {
+                audit.set("tool_result", objectMapper.valueToTree(toolResult));
             }
             return objectMapper.writeValueAsString(audit);
         } catch (Exception exception) {
@@ -747,6 +924,18 @@ public class ChatService {
                 audit.put("freshness", "REALTIME");
                 audit.put("requires_confirmation", false);
             }
+            case READ_TOOL -> {
+                audit.put("knowledge_scope", "PUBLIC");
+                audit.put("operation", "READ_TOOL");
+                audit.put("freshness", "REALTIME");
+                audit.put("requires_confirmation", false);
+            }
+            case WRITE_TOOL_CONFIRMATION -> {
+                audit.put("knowledge_scope", "ENTERPRISE");
+                audit.put("operation", "WRITE_TOOL");
+                audit.put("freshness", "STATIC");
+                audit.put("requires_confirmation", true);
+            }
             default -> {
                 audit.put("knowledge_scope", "PUBLIC");
                 audit.put("operation", "ANSWER");
@@ -759,10 +948,15 @@ public class ChatService {
     public record StreamingAsk(
             ChatSession session,
             ChatMessage userMessage,
+            String userId,
+            String department,
             String question,
             String documentId,
             ChatRouteDecision routeDecision
     ) {
+    }
+
+    private record ToolAnswer(FastApiRagResponse response, ChatMessage message) {
     }
 
     public record ChatRouteDecision(
@@ -772,7 +966,8 @@ public class ChatService {
             String reasonCode,
             Double confidence,
             Boolean enterpriseKnowledge,
-            FastApiIntentClassificationResponse classification
+            FastApiIntentClassificationResponse classification,
+            String toolName
     ) {
         private static ChatRouteDecision rag(
                 String decisionSource,
@@ -788,7 +983,8 @@ public class ChatService {
                     reasonCode,
                     confidence,
                     enterpriseKnowledge,
-                    classification
+                    classification,
+                    classification == null ? null : classification.toolName()
             );
         }
 
@@ -803,7 +999,8 @@ public class ChatService {
                     classification.reasonCode(),
                     classification.confidence(),
                     classification.enterpriseKnowledge(),
-                    classification
+                    classification,
+                    classification.toolName()
             );
         }
     }
@@ -815,7 +1012,9 @@ public class ChatService {
         TOOL_CALL("tool_call", "tool_call"),
         CLARIFICATION("clarification", "clarification"),
         DESTRUCTIVE_ACTION_BLOCKED("destructive_action_blocked", "destructive_action_blocked"),
-        REALTIME_TOOL_UNAVAILABLE("realtime_tool_unavailable", "realtime_tool_unavailable");
+        REALTIME_TOOL_UNAVAILABLE("realtime_tool_unavailable", "realtime_tool_unavailable"),
+        READ_TOOL("tool_read", "tool_read"),
+        WRITE_TOOL_CONFIRMATION("tool_confirmation_required", "tool_confirmation_required");
 
         private final String apiMode;
         private final String auditMode;

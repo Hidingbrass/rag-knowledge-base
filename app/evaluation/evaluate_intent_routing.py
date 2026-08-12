@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from datetime import datetime, timezone
 from collections import defaultdict
 from pathlib import Path
 from typing import Callable
@@ -11,6 +12,7 @@ from typing import Callable
 from app.evaluation.utils import calculate_rate
 from app.schemas.chat import IntentClassificationRequest
 from app.services.intent_service import classify_intent
+from app.core.config import settings
 
 
 DEFAULT_INTENT_DATASET = (
@@ -19,9 +21,11 @@ DEFAULT_INTENT_DATASET = (
     / "intent_routing"
     / "evaluation_cases.json"
 )
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 Classifier = Callable[[IntentClassificationRequest], dict]
 EVALUATED_FIELDS = ("intent", "knowledge_scope", "operation", "freshness")
+DEFAULT_THRESHOLD_CANDIDATES = (0.50, 0.60, 0.70, 0.80, 0.85, 0.90, 0.95)
 
 
 def evaluate_intent_routing(
@@ -84,8 +88,12 @@ def evaluate_intent_routing(
         if result["expected"]["freshness"] == "REALTIME"
     ]
 
+    threshold_calibration = _calibrate_thresholds(results)
     return {
-        "dataset": str(path),
+        "evaluated_at": datetime.now(timezone.utc).isoformat(),
+        "model": settings.intent_model,
+        "configured_threshold": settings.intent_classifier_min_confidence,
+        "dataset": _display_path(path),
         "case_count": case_count,
         "passed_count": sum(result["passed"] for result in results),
         "pass_rate": _rate(results, lambda result: result["passed"]),
@@ -122,6 +130,7 @@ def evaluate_intent_routing(
             expected: dict(predictions)
             for expected, predictions in confusion_matrix.items()
         },
+        "threshold_calibration": threshold_calibration,
         "results": results,
     }
 
@@ -131,6 +140,77 @@ def _rate(results: list[dict], predicate: Callable[[dict], bool]) -> float:
         calculate_rate(sum(predicate(result) for result in results), len(results)),
         4,
     )
+
+
+def _display_path(path: Path) -> str:
+    """优先输出仓库相对路径，避免评测产物绑定本机目录。"""
+    resolved = path.resolve()
+    try:
+        return str(resolved.relative_to(PROJECT_ROOT))
+    except ValueError:
+        return str(resolved)
+
+
+def _calibrate_thresholds(results: list[dict]) -> dict:
+    """按生产降级规则扫描阈值；低置信或企业标记都视为 RAG。"""
+    candidates = []
+    for threshold in DEFAULT_THRESHOLD_CANDIDATES:
+        evaluated = []
+        for result in results:
+            actual = result["actual"]
+            expected_intent = result["expected"]["intent"]
+            if actual is None:
+                effective_intent = "ERROR"
+            else:
+                confidence = float(actual.get("confidence", 1.0))
+                enterprise = bool(actual.get("enterprise_knowledge")) \
+                    or actual.get("knowledge_scope") == "ENTERPRISE"
+                effective_intent = (
+                    "KNOWLEDGE_QA"
+                    if enterprise or confidence < threshold
+                    else str(actual.get("intent", "ERROR"))
+                )
+            evaluated.append((expected_intent, effective_intent))
+
+        enterprise = [item for item in evaluated if item[0] == "KNOWLEDGE_QA"]
+        expected_non_rag = [item for item in evaluated if item[0] != "KNOWLEDGE_QA"]
+        candidates.append({
+            "threshold": threshold,
+            "effective_intent_accuracy": round(calculate_rate(
+                sum(expected == actual for expected, actual in evaluated),
+                len(evaluated),
+            ), 4),
+            "enterprise_rag_recall": round(calculate_rate(
+                sum(actual == "KNOWLEDGE_QA" for _, actual in enterprise),
+                len(enterprise),
+            ), 4),
+            "non_rag_coverage": round(calculate_rate(
+                sum(actual != "KNOWLEDGE_QA" for _, actual in expected_non_rag),
+                len(expected_non_rag),
+            ), 4),
+        })
+
+    safe_candidates = [
+        item for item in candidates if item["enterprise_rag_recall"] == 1.0
+    ]
+    best_accuracy = max(
+        (item["effective_intent_accuracy"] for item in safe_candidates),
+        default=0.0,
+    )
+    recommended = max(
+        (
+            item for item in safe_candidates
+            if item["effective_intent_accuracy"] == best_accuracy
+        ),
+        key=lambda item: item["threshold"],
+        default=None,
+    )
+    return {
+        "selection_rule": "企业知识 RAG 召回率为 1.0 时，选择意图准确率最高者；并列取更保守的较高阈值",
+        "recommended_threshold": None if recommended is None else recommended["threshold"],
+        "candidates": candidates,
+        "limitation": "基于小规模人工集和模型自报 confidence，仅用于本项目初始阈值，不代表概率校准",
+    }
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:

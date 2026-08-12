@@ -135,6 +135,11 @@ public class ChatMessage {
         return routingDecisionJson;
     }
 
+    public void replaceToolActionResult(String updatedContent, String updatedRoutingDecisionJson) {
+        this.content = updatedContent;
+        this.routingDecisionJson = updatedRoutingDecisionJson;
+    }
+
     public Instant createdAt() {
         return createdAt;
     }

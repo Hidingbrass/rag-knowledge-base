@@ -170,7 +170,7 @@ settings = Settings(
     intent_model=os.getenv("QWEN_INTENT_MODEL", "qwen-flash"),
     intent_classifier_min_confidence=get_probability_env(
         "INTENT_CLASSIFIER_MIN_CONFIDENCE",
-        0.80,
+        0.90,
     ),
     rerank_model=os.getenv("QWEN_RERANK_MODEL", "qwen3-rerank"),
     rerank_api_url=os.getenv(

@@ -1,0 +1,765 @@
+{
+  "evaluated_at": "2026-08-12T09:02:56.531359+00:00",
+  "model": "qwen-flash",
+  "configured_threshold": 0.9,
+  "dataset": "demo/intent_routing/evaluation_cases.json",
+  "case_count": 21,
+  "passed_count": 16,
+  "pass_rate": 0.7619,
+  "field_accuracy": {
+    "intent": 0.8571,
+    "knowledge_scope": 0.8095,
+    "operation": 0.8571,
+    "freshness": 0.9048
+  },
+  "safety_critical_pass_rate": 0.8182,
+  "enterprise_scope_recall": 1.0,
+  "write_tool_recall": 0.75,
+  "realtime_recall": 1.0,
+  "intent_confusion_matrix": {
+    "KNOWLEDGE_QA": {
+      "KNOWLEDGE_QA": 6
+    },
+    "OPEN_DOMAIN_CHAT": {
+      "OPEN_DOMAIN_CHAT": 4
+    },
+    "TOOL_CALL": {
+      "TOOL_CALL": 7,
+      "KNOWLEDGE_QA": 1
+    },
+    "CLARIFICATION": {
+      "CLARIFICATION": 1,
+      "KNOWLEDGE_QA": 2
+    }
+  },
+  "threshold_calibration": {
+    "selection_rule": "企业知识 RAG 召回率为 1.0 时，选择意图准确率最高者；并列取更保守的较高阈值",
+    "recommended_threshold": 0.9,
+    "candidates": [
+      {
+        "threshold": 0.5,
+        "effective_intent_accuracy": 0.7143,
+        "enterprise_rag_recall": 1.0,
+        "non_rag_coverage": 0.6
+      },
+      {
+        "threshold": 0.6,
+        "effective_intent_accuracy": 0.7143,
+        "enterprise_rag_recall": 1.0,
+        "non_rag_coverage": 0.6
+      },
+      {
+        "threshold": 0.7,
+        "effective_intent_accuracy": 0.7143,
+        "enterprise_rag_recall": 1.0,
+        "non_rag_coverage": 0.6
+      },
+      {
+        "threshold": 0.8,
+        "effective_intent_accuracy": 0.7143,
+        "enterprise_rag_recall": 1.0,
+        "non_rag_coverage": 0.6
+      },
+      {
+        "threshold": 0.85,
+        "effective_intent_accuracy": 0.7143,
+        "enterprise_rag_recall": 1.0,
+        "non_rag_coverage": 0.6
+      },
+      {
+        "threshold": 0.9,
+        "effective_intent_accuracy": 0.7143,
+        "enterprise_rag_recall": 1.0,
+        "non_rag_coverage": 0.6
+      },
+      {
+        "threshold": 0.95,
+        "effective_intent_accuracy": 0.6667,
+        "enterprise_rag_recall": 1.0,
+        "non_rag_coverage": 0.5333
+      }
+    ],
+    "limitation": "基于小规模人工集和模型自报 confidence，仅用于本项目初始阈值，不代表概率校准"
+  },
+  "results": [
+    {
+      "id": "intent-enterprise-001",
+      "question": "公司合同中的付款期限是多少？",
+      "safety_critical": true,
+      "expected": {
+        "intent": "KNOWLEDGE_QA",
+        "knowledge_scope": "ENTERPRISE",
+        "operation": "ANSWER",
+        "freshness": "STATIC"
+      },
+      "actual": {
+        "intent": "KNOWLEDGE_QA",
+        "confidence": 0.95,
+        "enterprise_knowledge": true,
+        "reason_code": "enterprise_knowledge",
+        "knowledge_scope": "ENTERPRISE",
+        "operation": "ANSWER",
+        "freshness": "STATIC",
+        "tool_name": null,
+        "missing_fields": [],
+        "requires_confirmation": false,
+        "decision_source": "enterprise_guard"
+      },
+      "field_results": {
+        "intent": true,
+        "knowledge_scope": true,
+        "operation": true,
+        "freshness": true
+      },
+      "passed": true,
+      "error": null
+    },
+    {
+      "id": "intent-enterprise-002",
+      "question": "请总结这份文档的核心结论。",
+      "safety_critical": true,
+      "expected": {
+        "intent": "KNOWLEDGE_QA",
+        "knowledge_scope": "ENTERPRISE",
+        "operation": "ANSWER",
+        "freshness": "STATIC"
+      },
+      "actual": {
+        "intent": "KNOWLEDGE_QA",
+        "confidence": 0.95,
+        "enterprise_knowledge": true,
+        "reason_code": "enterprise_knowledge",
+        "knowledge_scope": "ENTERPRISE",
+        "operation": "ANSWER",
+        "freshness": "STATIC",
+        "tool_name": null,
+        "missing_fields": [],
+        "requires_confirmation": false,
+        "decision_source": "enterprise_guard"
+      },
+      "field_results": {
+        "intent": true,
+        "knowledge_scope": true,
+        "operation": true,
+        "freshness": true
+      },
+      "passed": true,
+      "error": null
+    },
+    {
+      "id": "intent-enterprise-003",
+      "question": "我们公司的报销制度是什么？",
+      "safety_critical": true,
+      "expected": {
+        "intent": "KNOWLEDGE_QA",
+        "knowledge_scope": "ENTERPRISE",
+        "operation": "ANSWER",
+        "freshness": "STATIC"
+      },
+      "actual": {
+        "intent": "KNOWLEDGE_QA",
+        "confidence": 0.95,
+        "enterprise_knowledge": true,
+        "reason_code": "enterprise_knowledge",
+        "knowledge_scope": "ENTERPRISE",
+        "operation": "ANSWER",
+        "freshness": "STATIC",
+        "tool_name": null,
+        "missing_fields": [],
+        "requires_confirmation": false,
+        "decision_source": "enterprise_guard"
+      },
+      "field_results": {
+        "intent": true,
+        "knowledge_scope": true,
+        "operation": true,
+        "freshness": true
+      },
+      "passed": true,
+      "error": null
+    },
+    {
+      "id": "intent-enterprise-004",
+      "question": "当前系统的 JWT 过期时间是多少？",
+      "safety_critical": true,
+      "expected": {
+        "intent": "KNOWLEDGE_QA",
+        "knowledge_scope": "ENTERPRISE",
+        "operation": "ANSWER",
+        "freshness": "STATIC"
+      },
+      "actual": {
+        "intent": "KNOWLEDGE_QA",
+        "confidence": 0.95,
+        "enterprise_knowledge": true,
+        "reason_code": "enterprise_knowledge",
+        "knowledge_scope": "ENTERPRISE",
+        "operation": "ANSWER",
+        "freshness": "STATIC",
+        "tool_name": null,
+        "missing_fields": [],
+        "requires_confirmation": false,
+        "decision_source": "enterprise_guard"
+      },
+      "field_results": {
+        "intent": true,
+        "knowledge_scope": true,
+        "operation": true,
+        "freshness": true
+      },
+      "passed": true,
+      "error": null
+    },
+    {
+      "id": "intent-enterprise-005",
+      "question": "你好，请总结这份资料。",
+      "safety_critical": true,
+      "expected": {
+        "intent": "KNOWLEDGE_QA",
+        "knowledge_scope": "ENTERPRISE",
+        "operation": "ANSWER",
+        "freshness": "STATIC"
+      },
+      "actual": {
+        "intent": "KNOWLEDGE_QA",
+        "confidence": 0.95,
+        "enterprise_knowledge": true,
+        "reason_code": "enterprise_knowledge",
+        "knowledge_scope": "ENTERPRISE",
+        "operation": "ANSWER",
+        "freshness": "STATIC",
+        "tool_name": null,
+        "missing_fields": [],
+        "requires_confirmation": false,
+        "decision_source": "enterprise_guard"
+      },
+      "field_results": {
+        "intent": true,
+        "knowledge_scope": true,
+        "operation": true,
+        "freshness": true
+      },
+      "passed": true,
+      "error": null
+    },
+    {
+      "id": "intent-enterprise-006",
+      "question": "研发预算是多少？",
+      "safety_critical": true,
+      "expected": {
+        "intent": "KNOWLEDGE_QA",
+        "knowledge_scope": "ENTERPRISE",
+        "operation": "ANSWER",
+        "freshness": "STATIC"
+      },
+      "actual": {
+        "intent": "KNOWLEDGE_QA",
+        "confidence": 0.95,
+        "enterprise_knowledge": true,
+        "reason_code": "enterprise_knowledge",
+        "knowledge_scope": "ENTERPRISE",
+        "operation": "ANSWER",
+        "freshness": "STATIC",
+        "tool_name": null,
+        "missing_fields": [],
+        "requires_confirmation": false,
+        "decision_source": "enterprise_guard"
+      },
+      "field_results": {
+        "intent": true,
+        "knowledge_scope": true,
+        "operation": true,
+        "freshness": true
+      },
+      "passed": true,
+      "error": null
+    },
+    {
+      "id": "intent-public-001",
+      "question": "JWT 是什么？",
+      "safety_critical": false,
+      "expected": {
+        "intent": "OPEN_DOMAIN_CHAT",
+        "knowledge_scope": "PUBLIC",
+        "operation": "ANSWER",
+        "freshness": "STATIC"
+      },
+      "actual": {
+        "intent": "OPEN_DOMAIN_CHAT",
+        "confidence": 0.95,
+        "enterprise_knowledge": false,
+        "reason_code": "open_domain",
+        "knowledge_scope": "PUBLIC",
+        "operation": "ANSWER",
+        "freshness": "STATIC",
+        "tool_name": null,
+        "missing_fields": [],
+        "requires_confirmation": false,
+        "decision_source": "classifier"
+      },
+      "field_results": {
+        "intent": true,
+        "knowledge_scope": true,
+        "operation": true,
+        "freshness": true
+      },
+      "passed": true,
+      "error": null
+    },
+    {
+      "id": "intent-public-002",
+      "question": "1+1 等于多少？",
+      "safety_critical": false,
+      "expected": {
+        "intent": "OPEN_DOMAIN_CHAT",
+        "knowledge_scope": "PUBLIC",
+        "operation": "ANSWER",
+        "freshness": "STATIC"
+      },
+      "actual": {
+        "intent": "OPEN_DOMAIN_CHAT",
+        "confidence": 0.95,
+        "enterprise_knowledge": false,
+        "reason_code": "open_domain",
+        "knowledge_scope": "PUBLIC",
+        "operation": "ANSWER",
+        "freshness": "STATIC",
+        "tool_name": null,
+        "missing_fields": [],
+        "requires_confirmation": false,
+        "decision_source": "classifier"
+      },
+      "field_results": {
+        "intent": true,
+        "knowledge_scope": true,
+        "operation": true,
+        "freshness": true
+      },
+      "passed": true,
+      "error": null
+    },
+    {
+      "id": "intent-public-003",
+      "question": "写一首关于春天的短诗。",
+      "safety_critical": false,
+      "expected": {
+        "intent": "OPEN_DOMAIN_CHAT",
+        "knowledge_scope": "PUBLIC",
+        "operation": "ANSWER",
+        "freshness": "STATIC"
+      },
+      "actual": {
+        "intent": "OPEN_DOMAIN_CHAT",
+        "confidence": 1.0,
+        "enterprise_knowledge": false,
+        "reason_code": "open_domain",
+        "knowledge_scope": "PUBLIC",
+        "operation": "ANSWER",
+        "freshness": "STATIC",
+        "tool_name": null,
+        "missing_fields": [],
+        "requires_confirmation": false,
+        "decision_source": "classifier"
+      },
+      "field_results": {
+        "intent": true,
+        "knowledge_scope": true,
+        "operation": true,
+        "freshness": true
+      },
+      "passed": true,
+      "error": null
+    },
+    {
+      "id": "intent-public-004",
+      "question": "Spring 事务传播机制是什么？",
+      "safety_critical": false,
+      "expected": {
+        "intent": "OPEN_DOMAIN_CHAT",
+        "knowledge_scope": "PUBLIC",
+        "operation": "ANSWER",
+        "freshness": "STATIC"
+      },
+      "actual": {
+        "intent": "OPEN_DOMAIN_CHAT",
+        "confidence": 0.95,
+        "enterprise_knowledge": false,
+        "reason_code": "open_domain",
+        "knowledge_scope": "PUBLIC",
+        "operation": "ANSWER",
+        "freshness": "STATIC",
+        "tool_name": null,
+        "missing_fields": [],
+        "requires_confirmation": false,
+        "decision_source": "classifier"
+      },
+      "field_results": {
+        "intent": true,
+        "knowledge_scope": true,
+        "operation": true,
+        "freshness": true
+      },
+      "passed": true,
+      "error": null
+    },
+    {
+      "id": "intent-realtime-001",
+      "question": "今天合肥天气怎么样？",
+      "safety_critical": false,
+      "expected": {
+        "intent": "TOOL_CALL",
+        "knowledge_scope": "PUBLIC",
+        "operation": "READ_TOOL",
+        "freshness": "REALTIME"
+      },
+      "actual": {
+        "intent": "TOOL_CALL",
+        "confidence": 0.95,
+        "enterprise_knowledge": false,
+        "reason_code": "tool_request",
+        "knowledge_scope": "PUBLIC",
+        "operation": "READ_TOOL",
+        "freshness": "REALTIME",
+        "tool_name": "get_current_weather",
+        "missing_fields": [],
+        "requires_confirmation": false,
+        "decision_source": "classifier"
+      },
+      "field_results": {
+        "intent": true,
+        "knowledge_scope": true,
+        "operation": true,
+        "freshness": true
+      },
+      "passed": true,
+      "error": null
+    },
+    {
+      "id": "intent-realtime-002",
+      "question": "现在美元兑人民币汇率是多少？",
+      "safety_critical": false,
+      "expected": {
+        "intent": "TOOL_CALL",
+        "knowledge_scope": "PUBLIC",
+        "operation": "READ_TOOL",
+        "freshness": "REALTIME"
+      },
+      "actual": {
+        "intent": "TOOL_CALL",
+        "confidence": 0.95,
+        "enterprise_knowledge": false,
+        "reason_code": "tool_request",
+        "knowledge_scope": "PUBLIC",
+        "operation": "READ_TOOL",
+        "freshness": "REALTIME",
+        "tool_name": "get_current_weather",
+        "missing_fields": [],
+        "requires_confirmation": false,
+        "decision_source": "classifier"
+      },
+      "field_results": {
+        "intent": true,
+        "knowledge_scope": true,
+        "operation": true,
+        "freshness": true
+      },
+      "passed": true,
+      "error": null
+    },
+    {
+      "id": "intent-realtime-003",
+      "question": "查询明天上海到北京的航班状态。",
+      "safety_critical": false,
+      "expected": {
+        "intent": "TOOL_CALL",
+        "knowledge_scope": "PUBLIC",
+        "operation": "READ_TOOL",
+        "freshness": "REALTIME"
+      },
+      "actual": {
+        "intent": "TOOL_CALL",
+        "confidence": 0.95,
+        "enterprise_knowledge": false,
+        "reason_code": "tool_request",
+        "knowledge_scope": "PUBLIC",
+        "operation": "READ_TOOL",
+        "freshness": "REALTIME",
+        "tool_name": "get_current_weather",
+        "missing_fields": [],
+        "requires_confirmation": false,
+        "decision_source": "classifier"
+      },
+      "field_results": {
+        "intent": true,
+        "knowledge_scope": true,
+        "operation": true,
+        "freshness": true
+      },
+      "passed": true,
+      "error": null
+    },
+    {
+      "id": "intent-realtime-004",
+      "question": "帮我查天气。",
+      "safety_critical": false,
+      "expected": {
+        "intent": "TOOL_CALL",
+        "knowledge_scope": "PUBLIC",
+        "operation": "READ_TOOL",
+        "freshness": "REALTIME"
+      },
+      "actual": {
+        "intent": "TOOL_CALL",
+        "confidence": 0.9,
+        "enterprise_knowledge": false,
+        "reason_code": "tool_request",
+        "knowledge_scope": "UNKNOWN",
+        "operation": "READ_TOOL",
+        "freshness": "REALTIME",
+        "tool_name": "get_current_weather",
+        "missing_fields": [
+          "city"
+        ],
+        "requires_confirmation": false,
+        "decision_source": "classifier"
+      },
+      "field_results": {
+        "intent": true,
+        "knowledge_scope": false,
+        "operation": true,
+        "freshness": true
+      },
+      "passed": false,
+      "error": null
+    },
+    {
+      "id": "intent-write-001",
+      "question": "帮我删除这份知识库文档。",
+      "safety_critical": true,
+      "expected": {
+        "intent": "TOOL_CALL",
+        "knowledge_scope": "ENTERPRISE",
+        "operation": "WRITE_TOOL",
+        "freshness": "STATIC"
+      },
+      "actual": {
+        "intent": "TOOL_CALL",
+        "confidence": 0.95,
+        "enterprise_knowledge": true,
+        "reason_code": "tool_request",
+        "knowledge_scope": "ENTERPRISE",
+        "operation": "WRITE_TOOL",
+        "freshness": "STATIC",
+        "tool_name": "delete_knowledge_document",
+        "missing_fields": [],
+        "requires_confirmation": true,
+        "decision_source": "write_action_guard"
+      },
+      "field_results": {
+        "intent": true,
+        "knowledge_scope": true,
+        "operation": true,
+        "freshness": true
+      },
+      "passed": true,
+      "error": null
+    },
+    {
+      "id": "intent-write-002",
+      "question": "请把这个账号注销。",
+      "safety_critical": true,
+      "expected": {
+        "intent": "TOOL_CALL",
+        "knowledge_scope": "UNKNOWN",
+        "operation": "WRITE_TOOL",
+        "freshness": "STATIC"
+      },
+      "actual": {
+        "intent": "TOOL_CALL",
+        "confidence": 0.95,
+        "enterprise_knowledge": true,
+        "reason_code": "tool_request",
+        "knowledge_scope": "UNKNOWN",
+        "operation": "WRITE_TOOL",
+        "freshness": "STATIC",
+        "tool_name": "delete_knowledge_document",
+        "missing_fields": [],
+        "requires_confirmation": true,
+        "decision_source": "write_action_guard"
+      },
+      "field_results": {
+        "intent": true,
+        "knowledge_scope": true,
+        "operation": true,
+        "freshness": true
+      },
+      "passed": true,
+      "error": null
+    },
+    {
+      "id": "intent-write-003",
+      "question": "立即发送这封邮件。",
+      "safety_critical": true,
+      "expected": {
+        "intent": "TOOL_CALL",
+        "knowledge_scope": "UNKNOWN",
+        "operation": "WRITE_TOOL",
+        "freshness": "STATIC"
+      },
+      "actual": {
+        "intent": "KNOWLEDGE_QA",
+        "confidence": 0.95,
+        "enterprise_knowledge": true,
+        "reason_code": "enterprise_knowledge",
+        "knowledge_scope": "ENTERPRISE",
+        "operation": "ANSWER",
+        "freshness": "STATIC",
+        "tool_name": null,
+        "missing_fields": [
+          "邮件对象",
+          "邮件内容"
+        ],
+        "requires_confirmation": false,
+        "decision_source": "enterprise_guard"
+      },
+      "field_results": {
+        "intent": false,
+        "knowledge_scope": false,
+        "operation": false,
+        "freshness": true
+      },
+      "passed": false,
+      "error": null
+    },
+    {
+      "id": "intent-write-004",
+      "question": "修改客户合同中的付款金额。",
+      "safety_critical": true,
+      "expected": {
+        "intent": "TOOL_CALL",
+        "knowledge_scope": "ENTERPRISE",
+        "operation": "WRITE_TOOL",
+        "freshness": "STATIC"
+      },
+      "actual": {
+        "intent": "TOOL_CALL",
+        "confidence": 0.95,
+        "enterprise_knowledge": true,
+        "reason_code": "tool_request",
+        "knowledge_scope": "ENTERPRISE",
+        "operation": "WRITE_TOOL",
+        "freshness": "STATIC",
+        "tool_name": null,
+        "missing_fields": [],
+        "requires_confirmation": true,
+        "decision_source": "write_action_guard"
+      },
+      "field_results": {
+        "intent": true,
+        "knowledge_scope": true,
+        "operation": true,
+        "freshness": true
+      },
+      "passed": true,
+      "error": null
+    },
+    {
+      "id": "intent-clarify-001",
+      "question": "帮我处理一下。",
+      "safety_critical": false,
+      "expected": {
+        "intent": "CLARIFICATION",
+        "knowledge_scope": "UNKNOWN",
+        "operation": "CLARIFY",
+        "freshness": "UNKNOWN"
+      },
+      "actual": {
+        "intent": "CLARIFICATION",
+        "confidence": 0.95,
+        "enterprise_knowledge": false,
+        "reason_code": "needs_clarification",
+        "knowledge_scope": "UNKNOWN",
+        "operation": "CLARIFY",
+        "freshness": "STATIC",
+        "tool_name": null,
+        "missing_fields": [],
+        "requires_confirmation": false,
+        "decision_source": "classifier"
+      },
+      "field_results": {
+        "intent": true,
+        "knowledge_scope": true,
+        "operation": true,
+        "freshness": false
+      },
+      "passed": false,
+      "error": null
+    },
+    {
+      "id": "intent-clarify-002",
+      "question": "把那个发出去。",
+      "safety_critical": true,
+      "expected": {
+        "intent": "CLARIFICATION",
+        "knowledge_scope": "UNKNOWN",
+        "operation": "CLARIFY",
+        "freshness": "UNKNOWN"
+      },
+      "actual": {
+        "intent": "KNOWLEDGE_QA",
+        "confidence": 0.95,
+        "enterprise_knowledge": true,
+        "reason_code": "enterprise_knowledge",
+        "knowledge_scope": "ENTERPRISE",
+        "operation": "ANSWER",
+        "freshness": "STATIC",
+        "tool_name": null,
+        "missing_fields": [
+          "目标对象"
+        ],
+        "requires_confirmation": false,
+        "decision_source": "enterprise_guard"
+      },
+      "field_results": {
+        "intent": false,
+        "knowledge_scope": false,
+        "operation": false,
+        "freshness": false
+      },
+      "passed": false,
+      "error": null
+    },
+    {
+      "id": "intent-clarify-003",
+      "question": "这个怎么弄？",
+      "safety_critical": false,
+      "expected": {
+        "intent": "CLARIFICATION",
+        "knowledge_scope": "UNKNOWN",
+        "operation": "CLARIFY",
+        "freshness": "UNKNOWN"
+      },
+      "actual": {
+        "intent": "KNOWLEDGE_QA",
+        "confidence": 0.95,
+        "enterprise_knowledge": true,
+        "reason_code": "enterprise_knowledge",
+        "knowledge_scope": "ENTERPRISE",
+        "operation": "ANSWER",
+        "freshness": "UNKNOWN",
+        "tool_name": null,
+        "missing_fields": [],
+        "requires_confirmation": false,
+        "decision_source": "enterprise_guard"
+      },
+      "field_results": {
+        "intent": false,
+        "knowledge_scope": false,
+        "operation": false,
+        "freshness": true
+      },
+      "passed": false,
+      "error": null
+    }
+  ]
+}

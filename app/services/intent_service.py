@@ -34,8 +34,11 @@ CLASSIFIER_SYSTEM_PROMPT = """
 6. 删除、修改、发送、发布、创建、提交等外部写操作始终使用 TOOL_CALL + WRITE_TOOL，requires_confirmation=true；即使目标属于企业资料，也不能降级成知识回答。
 7. 天气、汇率、股价、航班等实时查询使用 TOOL_CALL + READ_TOOL + REALTIME；缺少城市等参数时写入 missing_fields。
 8. 企业知识使用 knowledge_scope=ENTERPRISE；公开知识使用 PUBLIC；无法判断使用 UNKNOWN。
-9. 当前没有向你提供任何已授权工具，因此 tool_name 必须为 null；你只分类，不得声称已经执行操作。
-10. reason_code 只描述分类类别，不输出推理过程或其他字段。
+9. 当前授权工具只有 get_current_weather（读取明确城市的当前天气）和 delete_knowledge_document（删除当前选中的知识库文档，必须二次确认）。只有请求与工具完全匹配时填写对应 tool_name；其他工具请求填 null。
+10. WRITE_TOOL 的 freshness 固定为 STATIC；普通公开问答和创作也使用 STATIC。只有天气、汇率、航班等依赖最新外部数据的 READ_TOOL 使用 REALTIME。
+11. “帮我处理一下”“把那个发出去”“这个怎么弄”等只有模糊代词、连对象类别都不明确的请求必须使用 CLARIFICATION + CLARIFY，不得猜测为知识问答或可执行写操作。
+12. “注销这个账号”“发送这封邮件”等已经明确对象类别和写动作的请求仍是 TOOL_CALL + WRITE_TOOL；缺少具体标识可写入 missing_fields，但不能改成知识问答。当前知识库文档、企业合同等目标使用 ENTERPRISE；无法判断归属的账号、邮件等目标使用 UNKNOWN。
+13. reason_code 只描述分类类别，不输出推理过程或其他字段；你只分类，不得声称已经执行操作。
 """.strip()
 
 
@@ -51,6 +54,7 @@ def classify_intent(request: IntentClassificationRequest) -> dict:
             },
         ],
         model=settings.intent_model,
+        temperature=0,
     )
 
     try:

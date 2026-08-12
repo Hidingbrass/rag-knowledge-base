@@ -7,6 +7,7 @@ import com.example.aikb.enums.DocumentStatus;
 import com.example.aikb.exception.BusinessException;
 import com.example.aikb.repository.KnowledgeDocumentRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -141,6 +142,25 @@ public class DocumentService {
                                                        String department) {
         knowledgeBaseService.getRequiredWithAccess(knowledgeBaseId, userId, department);
         return documentRepository.findByKnowledgeBaseIdOrderByCreatedAtDesc(knowledgeBaseId);
+    }
+
+    /** 删除单份文档；执行前重新校验 owner、知识库归属和服务端文档 ID。 */
+    @Transactional
+    public String deleteDocument(UUID knowledgeBaseId,
+                                 String userId,
+                                 String department,
+                                 String fastApiDocumentId) {
+        knowledgeBaseService.getRequiredWithAccess(knowledgeBaseId, userId, department);
+        KnowledgeDocument document = documentRepository.findFirstByFastApiDocumentId(fastApiDocumentId)
+                .orElseThrow(() -> new BusinessException("文档不存在: " + fastApiDocumentId));
+        if (!document.knowledgeBaseId().equals(knowledgeBaseId)) {
+            throw new com.example.aikb.exception.ForbiddenException("无权删除该文档: " + fastApiDocumentId);
+        }
+        if (document.fastApiDocumentId() != null && !document.fastApiDocumentId().isBlank()) {
+            fastApiRagClient.deleteDocument(document.fastApiDocumentId());
+        }
+        documentRepository.delete(document);
+        return document.filename();
     }
 
     /**

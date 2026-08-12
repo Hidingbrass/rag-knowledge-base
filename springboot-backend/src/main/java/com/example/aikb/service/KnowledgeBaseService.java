@@ -12,6 +12,7 @@ import com.example.aikb.repository.ChatMessageRepository;
 import com.example.aikb.repository.ChatSessionRepository;
 import com.example.aikb.repository.KnowledgeDocumentRepository;
 import com.example.aikb.repository.KnowledgeBaseRepository;
+import com.example.aikb.repository.ToolActionRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,6 +40,7 @@ public class KnowledgeBaseService {
     private final KnowledgeDocumentRepository documentRepository;
     private final ChatSessionRepository chatSessionRepository;
     private final ChatMessageRepository chatMessageRepository;
+    private final ToolActionRepository toolActionRepository;
     private final FastApiRagClient fastApiRagClient;
 
     public KnowledgeBaseService(
@@ -46,12 +48,14 @@ public class KnowledgeBaseService {
             KnowledgeDocumentRepository documentRepository,
             ChatSessionRepository chatSessionRepository,
             ChatMessageRepository chatMessageRepository,
+            ToolActionRepository toolActionRepository,
             FastApiRagClient fastApiRagClient
     ) {
         this.repository = repository;
         this.documentRepository = documentRepository;
         this.chatSessionRepository = chatSessionRepository;
         this.chatMessageRepository = chatMessageRepository;
+        this.toolActionRepository = toolActionRepository;
         this.fastApiRagClient = fastApiRagClient;
     }
 
@@ -124,7 +128,7 @@ public class KnowledgeBaseService {
      * 删除个人资料库及其完整关联数据。
      *
      * Qdrant 删除接口是幂等的，因此先删除向量；如果后续数据库事务失败，重试仍然安全。
-     * MySQL 按“消息 -> 会话 -> 文档 -> 资料库”顺序删除，避免留下孤立业务数据。
+     * MySQL 按“工具操作 -> 消息 -> 会话 -> 文档 -> 资料库”顺序删除，避免留下孤立业务数据。
      */
     @Transactional
     public void delete(UUID knowledgeBaseId, String userId, String department) {
@@ -143,6 +147,7 @@ public class KnowledgeBaseService {
                 .map(ChatSession::id)
                 .toList();
         if (!sessionIds.isEmpty()) {
+            toolActionRepository.deleteBySessionIdIn(sessionIds);
             chatMessageRepository.deleteBySessionIdIn(sessionIds);
         }
         chatSessionRepository.deleteByKnowledgeBaseId(knowledgeBaseId);

@@ -34,12 +34,14 @@ def test_evaluator_reports_perfect_metrics_for_expected_predictions():
 
     report = evaluate_intent_routing(classifier=perfect_classifier)
 
+    assert report["dataset"] == "demo/intent_routing/evaluation_cases.json"
     assert report["case_count"] == len(cases)
     assert report["pass_rate"] == 1.0
     assert report["safety_critical_pass_rate"] == 1.0
     assert report["enterprise_scope_recall"] == 1.0
     assert report["write_tool_recall"] == 1.0
     assert report["realtime_recall"] == 1.0
+    assert report["threshold_calibration"]["recommended_threshold"] == 0.95
 
 
 def test_evaluator_keeps_running_and_penalizes_classifier_errors():
@@ -58,6 +60,7 @@ def test_evaluator_keeps_running_and_penalizes_classifier_errors():
     assert report["pass_rate"] < 1.0
     assert report["enterprise_scope_recall"] < 1.0
     assert report["intent_confusion_matrix"]["KNOWLEDGE_QA"]["ERROR"] >= 1
+    assert report["threshold_calibration"]["candidates"]
 
 
 def test_intent_routing_parse_args_uses_default_dataset():

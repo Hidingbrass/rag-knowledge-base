@@ -6,6 +6,8 @@ import java.text.Normalizer;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.regex.Pattern;
+import com.example.aikb.tool.CurrentWeatherTool;
+import com.example.aikb.tool.DeleteKnowledgeDocumentTool;
 
 /**
  * 在概率分类器之前处理不能依赖模型决定的路由策略。
@@ -44,6 +46,10 @@ public class DeterministicPolicyRouter {
                     + "\\b(?:delete|remove|clear|destroy|send|create|update|modify)\\b",
             Pattern.CASE_INSENSITIVE
     );
+    private static final Pattern DELETE_CURRENT_DOCUMENT = Pattern.compile(
+            "(?:删除|移除).{0,8}(?:这份|当前|选中|这个).{0,8}(?:知识库)?(?:文档|文件|资料)"
+                    + "|(?:把)?(?:这份|当前|选中|这个).{0,8}(?:知识库)?(?:文档|文件|资料).{0,8}(?:删除|移除)"
+    );
 
     private static final Pattern REALTIME_QUERY = Pattern.compile(
             "(?:(?:天气|气温|降雨|空气质量).{0,16}(?:怎么样|如何|多少|几度|会不会|有雨|查询|查|预报)"
@@ -58,6 +64,10 @@ public class DeterministicPolicyRouter {
                     + "|\\b(?:weather|temperature|exchange\\s+rate|stock\\s+price|flight|news|traffic)\\b"
                     + ".{0,32}\\b(?:today|tomorrow|current|currently|live|latest)\\b",
             Pattern.CASE_INSENSITIVE
+    );
+    private static final Pattern CURRENT_WEATHER_QUERY = Pattern.compile(
+            "(?:(?:今天|现在|当前|实时).{0,16}(?:天气|气温)"
+                    + "|(?:天气|气温).{0,16}(?:今天|现在|当前|实时))"
     );
 
     private static final String WRITE_ACTION_BLOCKED_ANSWER =
@@ -80,11 +90,21 @@ public class DeterministicPolicyRouter {
         }
 
         if (isDirectWriteAction(normalized)) {
+            if (DELETE_CURRENT_DOCUMENT.matcher(normalized).find()) {
+                return Optional.of(new PolicyDecision(
+                        PolicyRoute.WRITE_TOOL,
+                        null,
+                        "tool_confirmation_required",
+                        "delete_current_document_rule",
+                        DeleteKnowledgeDocumentTool.NAME
+                ));
+            }
             return Optional.of(new PolicyDecision(
                     PolicyRoute.DIRECT,
                     WRITE_ACTION_BLOCKED_ANSWER,
                     "destructive_action_blocked",
-                    "write_action_guard"
+                    "write_action_guard",
+                    null
             ));
         }
 
@@ -93,17 +113,28 @@ public class DeterministicPolicyRouter {
                     PolicyRoute.RAG,
                     null,
                     "rag",
-                    "enterprise_rule"
+                    "enterprise_rule",
+                    null
             ));
         }
 
         if (REALTIME_QUERY.matcher(normalized).find()
                 || ENGLISH_REALTIME_QUERY.matcher(normalized).find()) {
+            if (CURRENT_WEATHER_QUERY.matcher(normalized).find()) {
+                return Optional.of(new PolicyDecision(
+                        PolicyRoute.READ_TOOL,
+                        null,
+                        "tool_read",
+                        "current_weather_rule",
+                        CurrentWeatherTool.NAME
+                ));
+            }
             return Optional.of(new PolicyDecision(
                     PolicyRoute.DIRECT,
                     REALTIME_TOOL_UNAVAILABLE_ANSWER,
                     "realtime_tool_unavailable",
-                    "realtime_rule"
+                    "realtime_rule",
+                    null
             ));
         }
 
@@ -115,7 +146,8 @@ public class DeterministicPolicyRouter {
                 PolicyRoute.DIRECT,
                 WRITE_ACTION_BLOCKED_ANSWER,
                 "destructive_action_blocked",
-                reasonCode
+                reasonCode,
+                null
         );
     }
 
@@ -124,7 +156,8 @@ public class DeterministicPolicyRouter {
                 PolicyRoute.DIRECT,
                 REALTIME_TOOL_UNAVAILABLE_ANSWER,
                 "realtime_tool_unavailable",
-                reasonCode
+                reasonCode,
+                null
         );
     }
 
@@ -148,14 +181,20 @@ public class DeterministicPolicyRouter {
 
     public enum PolicyRoute {
         RAG,
-        DIRECT
+        DIRECT,
+        READ_TOOL,
+        WRITE_TOOL
     }
 
     public record PolicyDecision(
             PolicyRoute route,
             String answer,
             String auditMode,
-            String reasonCode
+            String reasonCode,
+            String toolName
     ) {
+        public PolicyDecision(PolicyRoute route, String answer, String auditMode, String reasonCode) {
+            this(route, answer, auditMode, reasonCode, null);
+        }
     }
 }

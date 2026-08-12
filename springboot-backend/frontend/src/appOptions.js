@@ -393,9 +393,17 @@ export default {
             }
         },
         normalizeChatMessage(message) {
+            let routingDecision = {};
+            try {
+                routingDecision = JSON.parse(message?.routingDecisionJson || "{}");
+            } catch (error) {
+                routingDecision = {};
+            }
             return {
                 ...message,
-                role: String(message?.role || "").toLowerCase()
+                role: String(message?.role || "").toLowerCase(),
+                routingDecision,
+                toolAction: routingDecision?.tool_action || null
             };
         },
         setStatus(message) {
@@ -988,6 +996,37 @@ export default {
         stopStreamingAnswer() {
             if (this.chatAbortController) {
                 this.chatAbortController.abort();
+            }
+        },
+        async confirmToolAction(message) {
+            const action = message?.toolAction;
+            if (!action?.id || action.status !== "PENDING") {
+                return;
+            }
+            const accepted = confirm("确认删除当前选中文档及其向量数据？此操作不可恢复。");
+            if (!accepted) {
+                this.setStatus("已取消，未执行删除操作。");
+                return;
+            }
+            action.running = true;
+            try {
+                const result = await this.requestJson(
+                    `/api/chat/tool-actions/${action.id}/confirm?${this.userQuery()}`,
+                    {
+                        method: "POST",
+                        headers: {"Content-Type": "application/json"},
+                        body: JSON.stringify({confirmation: "CONFIRM"})
+                    }
+                );
+                await this.loadMessages();
+                await this.loadDocuments();
+                this.setStatus(result.status === "EXECUTED"
+                    ? "文档删除已执行并写入审计记录。"
+                    : "确认已过期，未执行任何操作。");
+            } catch (error) {
+                this.setStatus(`工具操作失败：${error.message}`);
+            } finally {
+                action.running = false;
             }
         },
         async parseResume() {

@@ -17,6 +17,9 @@ import com.example.aikb.exception.BusinessException;
 import com.example.aikb.exception.ForbiddenException;
 import com.example.aikb.repository.ChatMessageRepository;
 import com.example.aikb.repository.KnowledgeDocumentRepository;
+import com.example.aikb.repository.ToolActionRepository;
+import com.example.aikb.tool.AuthorizedToolRegistry;
+import com.example.aikb.tool.ToolExecutionResult;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -61,11 +64,17 @@ class ChatServiceTests {
     @Autowired
     private KnowledgeDocumentRepository documentRepository;
 
+    @Autowired
+    private ToolActionRepository toolActionRepository;
+
     @MockBean
     private FastApiRagClient fastApiRagClient;
 
     @MockBean
     private AiRateLimitService aiRateLimitService;
+
+    @MockBean
+    private AuthorizedToolRegistry toolRegistry;
 
     /**
      * 创建一个测试用知识库。
@@ -372,7 +381,7 @@ class ChatServiceTests {
     }
 
     @Test
-    void realtimeQueryShouldReturnTransparentUnavailableAnswerWithoutAiCalls() {
+    void realtimeWeatherShouldUseAuthorizedReadToolWithoutAiCalls() {
         KnowledgeBase knowledgeBase = createDevKnowledgeBase();
         ChatSession session = chatService.createSession(new CreateChatSessionRequest(
                 knowledgeBase.id(),
@@ -382,6 +391,9 @@ class ChatServiceTests {
         ));
         saveDocument(knowledgeBase.id(), "realtime-doc", DocumentStatus.AVAILABLE);
 
+        when(toolRegistry.execute(anyString(), any(), any(), any()))
+                .thenReturn(new ToolExecutionResult("合肥当前天气：晴，26.0°C。来源：Open-Meteo。"));
+
         FastApiRagResponse response = chatService.ask(
                 session.id(),
                 "user-1",
@@ -390,13 +402,13 @@ class ChatServiceTests {
                 "realtime-doc"
         );
 
-        assertThat(response.retrievalMode()).isEqualTo("realtime_tool_unavailable");
+        assertThat(response.retrievalMode()).isEqualTo("tool_read");
         assertThat(response.sources()).isEmpty();
-        assertThat(response.answer()).contains("实时数据工具");
+        assertThat(response.answer()).contains("Open-Meteo");
         List<ChatMessage> messages = chatMessageRepository
                 .findBySessionIdOrderByCreatedAtAsc(session.id());
         assertThat(messages.get(1).routingDecisionJson())
-                .contains("realtime_rule", "REALTIME_TOOL_UNAVAILABLE");
+                .contains("current_weather_rule", "READ_TOOL", "get_current_weather");
 
         verify(aiRateLimitService, never()).checkAiCallAllowed(anyString(), anyString());
         verify(fastApiRagClient, never()).classifyIntent(anyString());
@@ -405,7 +417,7 @@ class ChatServiceTests {
     }
 
     @Test
-    void destructiveActionShouldBeBlockedWithoutClassifierRagOrToolCall() {
+    void currentDocumentDeletionShouldCreatePendingConfirmationWithoutExecutingTool() {
         KnowledgeBase knowledgeBase = createDevKnowledgeBase();
         ChatSession session = chatService.createSession(new CreateChatSessionRequest(
                 knowledgeBase.id(),
@@ -423,18 +435,20 @@ class ChatServiceTests {
                 "write-action-doc"
         );
 
-        assertThat(response.retrievalMode()).isEqualTo("destructive_action_blocked");
+        assertThat(response.retrievalMode()).isEqualTo("tool_confirmation_required");
         assertThat(response.sources()).isEmpty();
-        assertThat(response.answer()).contains("不会执行");
+        assertThat(response.answer()).contains("已准备删除", "不可恢复");
         List<ChatMessage> messages = chatMessageRepository
                 .findBySessionIdOrderByCreatedAtAsc(session.id());
         assertThat(messages.get(1).routingDecisionJson())
-                .contains("write_action_guard", "DESTRUCTIVE_ACTION_BLOCKED");
+                .contains("delete_current_document_rule", "WRITE_TOOL_CONFIRMATION", "PENDING");
+        assertThat(toolActionRepository.count()).isEqualTo(1);
 
         verify(aiRateLimitService, never()).checkAiCallAllowed(anyString(), anyString());
         verify(fastApiRagClient, never()).classifyIntent(anyString());
         verify(fastApiRagClient, never()).askWithRerank(anyString(), anyString());
         verify(fastApiRagClient, never()).chatWithoutKnowledgeBase(anyString(), anyString());
+        verify(toolRegistry, never()).execute(anyString(), any(), any(), any());
     }
 
     @Test

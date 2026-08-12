@@ -180,7 +180,11 @@ def create_embeddings(texts: list[str]) -> list[list[float]]:
     return vectors
 
 
-def chat_completion(messages: list[dict], model: str | None = None) -> str:
+def chat_completion(
+        messages: list[dict],
+        model: str | None = None,
+        temperature: float | None = None,
+) -> str:
     """调用 qwen-plus 生成聊天回答。
 
     参数：
@@ -204,6 +208,8 @@ def chat_completion(messages: list[dict], model: str | None = None) -> str:
             else settings.chat_max_output_tokens
         ),
     }
+    if temperature is not None:
+        request_options["temperature"] = temperature
     if json_response:
         # DashScope OpenAI-compatible JSON mode。Prompt 已明确包含 JSON，
         # 满足上游接口要求，并防止 Markdown/额外解释破坏后续解析。
