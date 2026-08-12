@@ -4,11 +4,16 @@ import com.example.aikb.client.FastApiRagClient;
 import com.example.aikb.dto.chat.ChatMessageResponse;
 import com.example.aikb.dto.chat.CreateChatSessionRequest;
 import com.example.aikb.dto.fastapi.FastApiRagResponse;
+import com.example.aikb.dto.fastapi.FastApiChatResponse;
+import com.example.aikb.dto.fastapi.FastApiIntentClassificationResponse;
+import com.example.aikb.config.IntentRoutingProperties;
 import com.example.aikb.entity.ChatMessage;
 import com.example.aikb.entity.ChatSession;
 import com.example.aikb.entity.KnowledgeDocument;
+import com.example.aikb.entity.ToolAction;
 import com.example.aikb.enums.DocumentStatus;
 import com.example.aikb.enums.MessageRole;
+import com.example.aikb.enums.ToolOperation;
 import com.example.aikb.exception.BusinessException;
 import com.example.aikb.exception.ForbiddenException;
 import com.example.aikb.repository.ChatMessageRepository;
@@ -16,11 +21,20 @@ import com.example.aikb.repository.ChatSessionRepository;
 import com.example.aikb.repository.KnowledgeDocumentRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.example.aikb.tool.AuthorizedToolRegistry;
+import com.example.aikb.tool.CurrentWeatherTool;
+import com.example.aikb.tool.ToolExecutionContext;
+import com.example.aikb.tool.ToolExecutionResult;
+import com.example.aikb.tool.WeatherLocationParser;
 import org.springframework.stereotype.Service;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Map;
 import java.util.UUID;
 import java.util.function.Consumer;
 
@@ -43,8 +57,7 @@ import static com.example.aikb.common.RequestIdentity.requireUserId;
 @Service
 public class ChatService {
 
-    private static final String SMALL_TALK_RETRIEVAL_MODE = "small_talk";
-
+    private static final Logger log = LoggerFactory.getLogger(ChatService.class);
     /**
      * 知识库业务服务。
      * <p>
@@ -77,6 +90,12 @@ public class ChatService {
     /** 对纯问候、感谢和能力询问执行整句白名单路由。 */
     private final SmallTalkRouter smallTalkRouter;
 
+    /** 在概率分类前处理写操作、企业知识和实时查询等确定性策略。 */
+    private final DeterministicPolicyRouter deterministicPolicyRouter;
+
+    /** 与 FastAPI 共享的分类置信度阈值。 */
+    private final IntentRoutingProperties intentRoutingProperties;
+
     /**
      * FastAPI RAG 客户端。
      *
@@ -98,24 +117,39 @@ public class ChatService {
      */
     private final ObjectMapper objectMapper;
 
+    /** 固定白名单工具注册表与写操作确认服务。 */
+    private final AuthorizedToolRegistry toolRegistry;
+    private final WeatherLocationParser weatherLocationParser;
+    private final ToolActionService toolActionService;
+
     public ChatService(
             KnowledgeBaseService knowledgeBaseService,
             ChatSessionRepository chatSessionRepository,
             ChatMessageRepository chatMessageRepository,
             KnowledgeDocumentRepository documentRepository,
             SmallTalkRouter smallTalkRouter,
+            DeterministicPolicyRouter deterministicPolicyRouter,
+            IntentRoutingProperties intentRoutingProperties,
             FastApiRagClient fastApiRagClient,
             AiRateLimitService aiRateLimitService,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            AuthorizedToolRegistry toolRegistry,
+            WeatherLocationParser weatherLocationParser,
+            ToolActionService toolActionService
     ) {
         this.knowledgeBaseService = knowledgeBaseService;
         this.chatSessionRepository = chatSessionRepository;
         this.chatMessageRepository = chatMessageRepository;
         this.documentRepository = documentRepository;
         this.smallTalkRouter = smallTalkRouter;
+        this.deterministicPolicyRouter = deterministicPolicyRouter;
+        this.intentRoutingProperties = intentRoutingProperties;
         this.fastApiRagClient = fastApiRagClient;
         this.aiRateLimitService = aiRateLimitService;
         this.objectMapper = objectMapper;
+        this.toolRegistry = toolRegistry;
+        this.weatherLocationParser = weatherLocationParser;
+        this.toolActionService = toolActionService;
     }
 
     /**
@@ -247,24 +281,36 @@ public class ChatService {
                 documentId
         );
 
-        if (prepared.smallTalkReply().isPresent()) {
-            SmallTalkRouter.SmallTalkReply reply = prepared.smallTalkReply().orElseThrow();
+        if (prepared.routeDecision().route() == ChatRoute.READ_TOOL) {
+            return executeReadTool(prepared).response();
+        }
+        if (prepared.routeDecision().route() == ChatRoute.WRITE_TOOL_CONFIRMATION) {
+            return stageWriteToolConfirmation(prepared).response();
+        }
+
+        if (prepared.routeDecision().directAnswer() != null) {
+            String answer = prepared.routeDecision().directAnswer();
             saveAssistantMessage(
                     prepared.session(),
-                    reply.answer(),
+                    answer,
                     null,
-                    SMALL_TALK_RETRIEVAL_MODE,
-                    null
+                    prepared.routeDecision().route().auditMode(),
+                    null,
+                    toRoutingDecisionJson(prepared.routeDecision())
             );
             return new FastApiRagResponse(
                     question,
-                    reply.answer(),
+                    answer,
                     List.of(),
-                    SMALL_TALK_RETRIEVAL_MODE,
+                    prepared.routeDecision().route().auditMode(),
                     null,
                     null,
                     null
             );
+        }
+
+        if (prepared.routeDecision().route() != ChatRoute.RAG) {
+            return answerWithoutKnowledgeBase(prepared);
         }
 
         FastApiRagResponse response = fastApiRagClient.askWithRerank(question, documentId);
@@ -273,7 +319,8 @@ public class ChatService {
                 response.answer(),
                 toSourcesJson(response),
                 response.retrievalMode(),
-                response.rerankElapsedSeconds()
+                response.rerankElapsedSeconds(),
+                toRoutingDecisionJson(prepared.routeDecision())
         );
         return response;
     }
@@ -292,8 +339,31 @@ public class ChatService {
         ChatSession session = getRequiredSessionWithAccess(sessionId, userId, department);
         validateDocumentBelongsToSessionKnowledgeBase(documentId, session.knowledgeBaseId());
         Optional<SmallTalkRouter.SmallTalkReply> smallTalkReply = smallTalkRouter.route(question);
-        if (smallTalkReply.isEmpty()) {
-            aiRateLimitService.checkAiCallAllowed(userId, "RAG_CHAT");
+        ChatRouteDecision routeDecision;
+        if (smallTalkReply.isPresent()) {
+            SmallTalkRouter.SmallTalkReply reply = smallTalkReply.orElseThrow();
+            routeDecision = new ChatRouteDecision(
+                    ChatRoute.SMALL_TALK,
+                    reply.answer(),
+                    "small_talk_rule",
+                    reply.intent().name().toLowerCase(java.util.Locale.ROOT),
+                    null,
+                    false,
+                    null,
+                    null
+            );
+        } else {
+            Optional<DeterministicPolicyRouter.PolicyDecision> policyDecision =
+                    deterministicPolicyRouter.route(question);
+            if (policyDecision.isPresent()) {
+                routeDecision = fromPolicyDecision(policyDecision.orElseThrow());
+                if (routeDecision.route().requiresAi()) {
+                    aiRateLimitService.checkAiCallAllowed(userId, "RAG_CHAT");
+                }
+            } else {
+                aiRateLimitService.checkAiCallAllowed(userId, "RAG_CHAT");
+                routeDecision = decideRoute(question);
+            }
         }
 
         ChatMessage userMessage = new ChatMessage(
@@ -310,9 +380,11 @@ public class ChatService {
         return new StreamingAsk(
                 session,
                 savedUserMessage,
+                requireUserId(userId),
+                requireDepartment(department),
                 question,
                 documentId,
-                smallTalkReply
+                routeDecision
         );
     }
 
@@ -320,12 +392,25 @@ public class ChatService {
      * 消费 FastAPI NDJSON 事件，向浏览器转发状态和文本增量，并在完成后保存 AI 消息。
      */
     public void streamAnswer(StreamingAsk prepared, Consumer<JsonNode> browserEventConsumer) {
-        if (prepared.smallTalkReply().isPresent()) {
-            streamSmallTalkAnswer(
+        if (prepared.routeDecision().route() == ChatRoute.READ_TOOL) {
+            streamToolResult(executeReadTool(prepared), browserEventConsumer);
+            return;
+        }
+        if (prepared.routeDecision().route() == ChatRoute.WRITE_TOOL_CONFIRMATION) {
+            streamToolResult(stageWriteToolConfirmation(prepared), browserEventConsumer);
+            return;
+        }
+        if (prepared.routeDecision().directAnswer() != null) {
+            streamDirectAnswer(
                     prepared,
-                    prepared.smallTalkReply().orElseThrow(),
+                    prepared.routeDecision().directAnswer(),
                     browserEventConsumer
             );
+            return;
+        }
+
+        if (prepared.routeDecision().route() != ChatRoute.RAG) {
+            streamAnswerWithoutKnowledgeBase(prepared, browserEventConsumer);
             return;
         }
 
@@ -389,7 +474,8 @@ public class ChatService {
                 answer.toString(),
                 toSourcesJson(sources[0]),
                 retrievalMode[0],
-                rerankElapsedSeconds[0]
+                rerankElapsedSeconds[0],
+                toRoutingDecisionJson(prepared.routeDecision())
         );
         var doneEvent = objectMapper.createObjectNode();
         doneEvent.put("type", "done");
@@ -397,22 +483,295 @@ public class ChatService {
         browserEventConsumer.accept(doneEvent);
     }
 
-    private void streamSmallTalkAnswer(
+    private void streamDirectAnswer(
             StreamingAsk prepared,
-            SmallTalkRouter.SmallTalkReply reply,
+            String answer,
             Consumer<JsonNode> browserEventConsumer
     ) {
         ChatMessage assistantMessage = saveAssistantMessage(
                 prepared.session(),
-                reply.answer(),
+                answer,
                 null,
-                SMALL_TALK_RETRIEVAL_MODE,
-                null
+                prepared.routeDecision().route().auditMode(),
+                null,
+                toRoutingDecisionJson(prepared.routeDecision())
         );
 
         var deltaEvent = objectMapper.createObjectNode();
         deltaEvent.put("type", "delta");
-        deltaEvent.put("content", reply.answer());
+        deltaEvent.put("content", answer);
+        browserEventConsumer.accept(deltaEvent);
+
+        var doneEvent = objectMapper.createObjectNode();
+        doneEvent.put("type", "done");
+        doneEvent.set("message", objectMapper.valueToTree(ChatMessageResponse.from(assistantMessage)));
+        browserEventConsumer.accept(doneEvent);
+    }
+
+    private ToolAnswer executeReadTool(StreamingAsk prepared) {
+        String toolName = prepared.routeDecision().toolName();
+        if (!CurrentWeatherTool.NAME.equals(toolName)) {
+            throw new BusinessException("当前只授权了天气只读工具");
+        }
+        Optional<String> city = weatherLocationParser.parse(prepared.question());
+        if (city.isEmpty()) {
+            String answer = "请告诉我需要查询天气的城市，例如“今天合肥天气怎么样？”。";
+            ChatMessage message = saveAssistantMessage(
+                    prepared.session(), answer, null, "tool_clarification", null,
+                    toRoutingDecisionJson(prepared.routeDecision(), null, Map.of("missing_fields", List.of("city")))
+            );
+            return new ToolAnswer(
+                    new FastApiRagResponse(prepared.question(), answer, List.of(),
+                            "tool_clarification", null, null, null),
+                    message
+            );
+        }
+
+        ObjectNode arguments = objectMapper.createObjectNode();
+        arguments.put("city", city.orElseThrow());
+        ToolExecutionResult result = toolRegistry.execute(
+                toolName,
+                ToolOperation.READ,
+                new ToolExecutionContext(prepared.userId(), prepared.department(), prepared.session().id()),
+                arguments
+        );
+        ChatMessage message = saveAssistantMessage(
+                prepared.session(), result.answer(), null, "tool_read", null,
+                toRoutingDecisionJson(prepared.routeDecision(), null, result.auditData())
+        );
+        return new ToolAnswer(
+                new FastApiRagResponse(prepared.question(), result.answer(), List.of(),
+                        "tool_read", null, null, null),
+                message
+        );
+    }
+
+    private ToolAnswer stageWriteToolConfirmation(StreamingAsk prepared) {
+        UUID assistantMessageId = UUID.randomUUID();
+        ToolActionService.StagedToolAction staged = toolActionService.stageDocumentDeletion(
+                prepared.session(),
+                prepared.userId(),
+                prepared.department(),
+                prepared.documentId(),
+                assistantMessageId
+        );
+        ChatMessage message = saveAssistantMessage(
+                assistantMessageId,
+                prepared.session(),
+                staged.prompt(),
+                null,
+                "tool_confirmation_required",
+                null,
+                toRoutingDecisionJson(prepared.routeDecision(), staged.action(), Map.of())
+        );
+        return new ToolAnswer(
+                new FastApiRagResponse(prepared.question(), staged.prompt(), List.of(),
+                        "tool_confirmation_required", null, null, null),
+                message
+        );
+    }
+
+    private void streamToolResult(ToolAnswer answer, Consumer<JsonNode> browserEventConsumer) {
+        var deltaEvent = objectMapper.createObjectNode();
+        deltaEvent.put("type", "delta");
+        deltaEvent.put("content", answer.response().answer());
+        browserEventConsumer.accept(deltaEvent);
+
+        var doneEvent = objectMapper.createObjectNode();
+        doneEvent.put("type", "done");
+        doneEvent.set("message", objectMapper.valueToTree(ChatMessageResponse.from(answer.message())));
+        browserEventConsumer.accept(doneEvent);
+    }
+
+    private ChatRouteDecision decideRoute(String question) {
+        try {
+            FastApiIntentClassificationResponse classification = fastApiRagClient.classifyIntent(question);
+            if (classification != null
+                    && (classification.requiresConfirmation()
+                    || "WRITE_TOOL".equals(classification.operation()))) {
+                return fromPolicyDecision(
+                        deterministicPolicyRouter.blockWriteAction("classifier_write_action"),
+                        classification
+                );
+            }
+            if (classification == null
+                    || classification.intent() == null
+                    || classification.enterpriseKnowledge()
+                    || "ENTERPRISE".equals(classification.knowledgeScope())
+                    || classification.confidence() < intentRoutingProperties.minConfidence()) {
+                return ChatRouteDecision.rag(
+                        classification == null ? "classifier_guard" : classification.decisionSource(),
+                        classification == null ? "invalid_classifier_result" : classification.reasonCode(),
+                        classification == null ? null : classification.confidence(),
+                        classification == null ? null : classification.enterpriseKnowledge(),
+                        classification
+                );
+            }
+            if ("READ_TOOL".equals(classification.operation())) {
+                if (!classification.missingFields().isEmpty()) {
+                    return ChatRouteDecision.classified(ChatRoute.CLARIFICATION, classification);
+                }
+                if (CurrentWeatherTool.NAME.equals(classification.toolName())) {
+                    return ChatRouteDecision.classified(ChatRoute.READ_TOOL, classification);
+                }
+                return fromPolicyDecision(
+                        deterministicPolicyRouter.realtimeToolUnavailable(
+                                "classifier_realtime_tool_unavailable"
+                        ),
+                        classification
+                );
+            }
+            if ("REALTIME".equals(classification.freshness())) {
+                return fromPolicyDecision(
+                        deterministicPolicyRouter.realtimeToolUnavailable(
+                                "classifier_realtime_tool_unavailable"
+                        ),
+                        classification
+                );
+            }
+            return switch (classification.intent()) {
+                case "OPEN_DOMAIN_CHAT" -> ChatRouteDecision.classified(
+                        ChatRoute.OPEN_DOMAIN_CHAT,
+                        classification
+                );
+                case "TOOL_CALL" -> ChatRouteDecision.classified(ChatRoute.TOOL_CALL, classification);
+                case "CLARIFICATION" -> ChatRouteDecision.classified(
+                        ChatRoute.CLARIFICATION,
+                        classification
+                );
+                default -> ChatRouteDecision.rag(
+                        "classifier_guard",
+                        "unknown_intent",
+                        classification.confidence(),
+                        classification.enterpriseKnowledge(),
+                        classification
+                );
+            };
+        } catch (BusinessException exception) {
+            log.warn("Intent classification failed; conservatively routing to RAG: {}", exception.getMessage());
+            return ChatRouteDecision.rag(
+                    "classifier_fallback",
+                    "classifier_unavailable",
+                    null,
+                    null,
+                    null
+            );
+        }
+    }
+
+    private ChatRouteDecision fromPolicyDecision(
+            DeterministicPolicyRouter.PolicyDecision decision
+    ) {
+        return fromPolicyDecision(decision, null);
+    }
+
+    private ChatRouteDecision fromPolicyDecision(
+            DeterministicPolicyRouter.PolicyDecision decision,
+            FastApiIntentClassificationResponse classification
+    ) {
+        if (decision.route() == DeterministicPolicyRouter.PolicyRoute.RAG) {
+            return ChatRouteDecision.rag(
+                    "deterministic_policy",
+                    decision.reasonCode(),
+                    null,
+                    true,
+                    null
+            );
+        }
+        if (decision.route() == DeterministicPolicyRouter.PolicyRoute.READ_TOOL) {
+            return new ChatRouteDecision(
+                    ChatRoute.READ_TOOL,
+                    null,
+                    "deterministic_policy",
+                    decision.reasonCode(),
+                    null,
+                    false,
+                    classification,
+                    decision.toolName()
+            );
+        }
+        if (decision.route() == DeterministicPolicyRouter.PolicyRoute.WRITE_TOOL) {
+            return new ChatRouteDecision(
+                    ChatRoute.WRITE_TOOL_CONFIRMATION,
+                    null,
+                    "deterministic_policy",
+                    decision.reasonCode(),
+                    null,
+                    true,
+                    classification,
+                    decision.toolName()
+            );
+        }
+        ChatRoute route = switch (decision.auditMode()) {
+            case "destructive_action_blocked" -> ChatRoute.DESTRUCTIVE_ACTION_BLOCKED;
+            case "realtime_tool_unavailable" -> ChatRoute.REALTIME_TOOL_UNAVAILABLE;
+            default -> throw new IllegalArgumentException(
+                    "Unsupported deterministic policy mode: " + decision.auditMode()
+            );
+        };
+        return new ChatRouteDecision(
+                route,
+                decision.answer(),
+                classification == null ? "deterministic_policy" : classification.decisionSource(),
+                decision.reasonCode(),
+                classification == null ? null : classification.confidence(),
+                classification == null ? false : classification.enterpriseKnowledge(),
+                classification,
+                decision.toolName()
+        );
+    }
+
+    private FastApiRagResponse answerWithoutKnowledgeBase(StreamingAsk prepared) {
+        FastApiChatResponse response = fastApiRagClient.chatWithoutKnowledgeBase(
+                prepared.question(),
+                prepared.routeDecision().route().apiMode()
+        );
+        saveAssistantMessage(
+                prepared.session(),
+                response.answer(),
+                null,
+                prepared.routeDecision().route().auditMode(),
+                null,
+                toRoutingDecisionJson(prepared.routeDecision())
+        );
+        return new FastApiRagResponse(
+                prepared.question(),
+                response.answer(),
+                List.of(),
+                prepared.routeDecision().route().auditMode(),
+                null,
+                null,
+                null,
+                response.modelUsage()
+        );
+    }
+
+    private void streamAnswerWithoutKnowledgeBase(
+            StreamingAsk prepared,
+            Consumer<JsonNode> browserEventConsumer
+    ) {
+        var statusEvent = objectMapper.createObjectNode();
+        statusEvent.put("type", "status");
+        statusEvent.put("stage", "routing");
+        statusEvent.put("message", "已识别为非知识库请求，正在生成回答");
+        browserEventConsumer.accept(statusEvent);
+
+        FastApiChatResponse response = fastApiRagClient.chatWithoutKnowledgeBase(
+                prepared.question(),
+                prepared.routeDecision().route().apiMode()
+        );
+        ChatMessage assistantMessage = saveAssistantMessage(
+                prepared.session(),
+                response.answer(),
+                null,
+                prepared.routeDecision().route().auditMode(),
+                null,
+                toRoutingDecisionJson(prepared.routeDecision())
+        );
+
+        var deltaEvent = objectMapper.createObjectNode();
+        deltaEvent.put("type", "delta");
+        deltaEvent.put("content", response.answer());
         browserEventConsumer.accept(deltaEvent);
 
         var doneEvent = objectMapper.createObjectNode();
@@ -426,16 +785,33 @@ public class ChatService {
             String answer,
             String sourcesJson,
             String retrievalMode,
-            Double rerankElapsedSeconds
+            Double rerankElapsedSeconds,
+            String routingDecisionJson
+    ) {
+        return saveAssistantMessage(
+                UUID.randomUUID(), session, answer, sourcesJson, retrievalMode,
+                rerankElapsedSeconds, routingDecisionJson
+        );
+    }
+
+    private ChatMessage saveAssistantMessage(
+            UUID messageId,
+            ChatSession session,
+            String answer,
+            String sourcesJson,
+            String retrievalMode,
+            Double rerankElapsedSeconds,
+            String routingDecisionJson
     ) {
         ChatMessage assistantMessage = new ChatMessage(
-                UUID.randomUUID(),
+                messageId,
                 session.id(),
                 MessageRole.ASSISTANT,
                 answer,
                 sourcesJson,
                 retrievalMode,
                 rerankElapsedSeconds,
+                routingDecisionJson,
                 Instant.now()
         );
         return chatMessageRepository.save(assistantMessage);
@@ -470,13 +846,198 @@ public class ChatService {
         }
     }
 
+    private String toRoutingDecisionJson(ChatRouteDecision decision) {
+        return toRoutingDecisionJson(decision, null, Map.of());
+    }
+
+    private String toRoutingDecisionJson(
+            ChatRouteDecision decision,
+            ToolAction action,
+            Map<String, ?> toolResult
+    ) {
+        try {
+            var audit = objectMapper.createObjectNode();
+            audit.put("route", decision.route().name());
+            audit.put("decision_source", decision.decisionSource());
+            audit.put("reason_code", decision.reasonCode());
+            if (decision.confidence() != null) {
+                audit.put("confidence", decision.confidence());
+            }
+            if (decision.enterpriseKnowledge() != null) {
+                audit.put("enterprise_knowledge", decision.enterpriseKnowledge());
+            }
+            FastApiIntentClassificationResponse classification = decision.classification();
+            if (classification != null) {
+                audit.put("knowledge_scope", classification.knowledgeScope());
+                audit.put("operation", classification.operation());
+                audit.put("freshness", classification.freshness());
+                if (classification.toolName() != null) {
+                    audit.put("tool_name", classification.toolName());
+                }
+                audit.set(
+                        "missing_fields",
+                        objectMapper.valueToTree(classification.missingFields())
+                );
+                audit.put("requires_confirmation", classification.requiresConfirmation());
+            } else {
+                addDeterministicRoutingAttributes(audit, decision.route());
+            }
+            if (decision.toolName() != null) {
+                audit.put("tool_name", decision.toolName());
+            }
+            if (action != null) {
+                ObjectNode actionAudit = audit.putObject("tool_action");
+                actionAudit.put("id", action.id().toString());
+                actionAudit.put("tool_name", action.toolName());
+                actionAudit.put("status", action.status().name());
+                actionAudit.put("expires_at", action.expiresAt().toString());
+            }
+            if (toolResult != null && !toolResult.isEmpty()) {
+                audit.set("tool_result", objectMapper.valueToTree(toolResult));
+            }
+            return objectMapper.writeValueAsString(audit);
+        } catch (Exception exception) {
+            throw new BusinessException("保存路由审计信息失败", exception);
+        }
+    }
+
+    private void addDeterministicRoutingAttributes(
+            com.fasterxml.jackson.databind.node.ObjectNode audit,
+            ChatRoute route
+    ) {
+        switch (route) {
+            case RAG -> {
+                audit.put("knowledge_scope", "ENTERPRISE");
+                audit.put("operation", "ANSWER");
+                audit.put("freshness", "STATIC");
+                audit.put("requires_confirmation", false);
+            }
+            case DESTRUCTIVE_ACTION_BLOCKED -> {
+                audit.put("knowledge_scope", "UNKNOWN");
+                audit.put("operation", "WRITE_TOOL");
+                audit.put("freshness", "UNKNOWN");
+                audit.put("requires_confirmation", true);
+            }
+            case REALTIME_TOOL_UNAVAILABLE -> {
+                audit.put("knowledge_scope", "PUBLIC");
+                audit.put("operation", "READ_TOOL");
+                audit.put("freshness", "REALTIME");
+                audit.put("requires_confirmation", false);
+            }
+            case READ_TOOL -> {
+                audit.put("knowledge_scope", "PUBLIC");
+                audit.put("operation", "READ_TOOL");
+                audit.put("freshness", "REALTIME");
+                audit.put("requires_confirmation", false);
+            }
+            case WRITE_TOOL_CONFIRMATION -> {
+                audit.put("knowledge_scope", "ENTERPRISE");
+                audit.put("operation", "WRITE_TOOL");
+                audit.put("freshness", "STATIC");
+                audit.put("requires_confirmation", true);
+            }
+            default -> {
+                audit.put("knowledge_scope", "PUBLIC");
+                audit.put("operation", "ANSWER");
+                audit.put("freshness", "STATIC");
+                audit.put("requires_confirmation", false);
+            }
+        }
+    }
+
     public record StreamingAsk(
             ChatSession session,
             ChatMessage userMessage,
+            String userId,
+            String department,
             String question,
             String documentId,
-            Optional<SmallTalkRouter.SmallTalkReply> smallTalkReply
+            ChatRouteDecision routeDecision
     ) {
+    }
+
+    private record ToolAnswer(FastApiRagResponse response, ChatMessage message) {
+    }
+
+    public record ChatRouteDecision(
+            ChatRoute route,
+            String directAnswer,
+            String decisionSource,
+            String reasonCode,
+            Double confidence,
+            Boolean enterpriseKnowledge,
+            FastApiIntentClassificationResponse classification,
+            String toolName
+    ) {
+        private static ChatRouteDecision rag(
+                String decisionSource,
+                String reasonCode,
+                Double confidence,
+                Boolean enterpriseKnowledge,
+                FastApiIntentClassificationResponse classification
+        ) {
+            return new ChatRouteDecision(
+                    ChatRoute.RAG,
+                    null,
+                    decisionSource,
+                    reasonCode,
+                    confidence,
+                    enterpriseKnowledge,
+                    classification,
+                    classification == null ? null : classification.toolName()
+            );
+        }
+
+        private static ChatRouteDecision classified(
+                ChatRoute route,
+                FastApiIntentClassificationResponse classification
+        ) {
+            return new ChatRouteDecision(
+                    route,
+                    null,
+                    classification.decisionSource(),
+                    classification.reasonCode(),
+                    classification.confidence(),
+                    classification.enterpriseKnowledge(),
+                    classification,
+                    classification.toolName()
+            );
+        }
+    }
+
+    public enum ChatRoute {
+        SMALL_TALK("small_talk", "small_talk"),
+        RAG("rag", "rag"),
+        OPEN_DOMAIN_CHAT("open_domain_chat", "open_domain_chat"),
+        TOOL_CALL("tool_call", "tool_call"),
+        CLARIFICATION("clarification", "clarification"),
+        DESTRUCTIVE_ACTION_BLOCKED("destructive_action_blocked", "destructive_action_blocked"),
+        REALTIME_TOOL_UNAVAILABLE("realtime_tool_unavailable", "realtime_tool_unavailable"),
+        READ_TOOL("tool_read", "tool_read"),
+        WRITE_TOOL_CONFIRMATION("tool_confirmation_required", "tool_confirmation_required");
+
+        private final String apiMode;
+        private final String auditMode;
+
+        ChatRoute(String apiMode, String auditMode) {
+            this.apiMode = apiMode;
+            this.auditMode = auditMode;
+        }
+
+        public String apiMode() {
+            return apiMode;
+        }
+
+        public String auditMode() {
+            return auditMode;
+        }
+
+        public boolean requiresAi() {
+            return this == RAG
+                    || this == OPEN_DOMAIN_CHAT
+                    || this == TOOL_CALL
+                    || this == CLARIFICATION;
+        }
     }
 
 }

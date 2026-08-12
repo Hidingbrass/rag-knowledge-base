@@ -94,6 +94,24 @@ describe("application authentication state", () => {
     expect(model.identity).toEqual({userId: "", department: ""});
   });
 
+  it("exposes a pending server-side tool action from routing audit", () => {
+    const message = appOptions.methods.normalizeChatMessage({
+      id: "assistant-1",
+      role: "ASSISTANT",
+      routingDecisionJson: JSON.stringify({
+        route: "WRITE_TOOL_CONFIRMATION",
+        tool_action: {id: "action-1", status: "PENDING", tool_name: "delete_knowledge_document"}
+      })
+    });
+
+    expect(message.role).toBe("assistant");
+    expect(message.toolAction).toEqual({
+      id: "action-1",
+      status: "PENDING",
+      tool_name: "delete_knowledge_document"
+    });
+  });
+
   it("rejects unsupported learning document extensions before upload", async () => {
     const setStatus = vi.fn();
     const event = {target: {files: [{name: "scores.csv"}], value: "selected"}};

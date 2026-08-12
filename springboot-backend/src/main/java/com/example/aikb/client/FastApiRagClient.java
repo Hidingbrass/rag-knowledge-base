@@ -4,6 +4,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.example.aikb.config.FastApiProperties;
 import com.example.aikb.dto.fastapi.FastApiDocumentIndexResponse;
+import com.example.aikb.dto.fastapi.FastApiChatRequest;
+import com.example.aikb.dto.fastapi.FastApiChatResponse;
+import com.example.aikb.dto.fastapi.FastApiIntentClassificationResponse;
 import com.example.aikb.dto.fastapi.FastApiInterviewPrepRequest;
 import com.example.aikb.dto.fastapi.FastApiInterviewPrepResponse;
 import com.example.aikb.dto.fastapi.FastApiJdParseRequest;
@@ -100,6 +103,31 @@ public class FastApiRagClient {
                     .retrieve()
                     .body(FastApiRagResponse.class),
                 "调用 FastAPI RAG 服务失败"
+        );
+    }
+
+    /** 调用规则后置的轻量意图分类器。 */
+    public FastApiIntentClassificationResponse classifyIntent(String question) {
+        return callFastApi("INTENT_CLASSIFY", "/intent/classify", () ->
+                        fastApiRestClient.post()
+                                .uri("/intent/classify")
+                                .body(java.util.Map.of("question", question))
+                                .retrieve()
+                                .body(FastApiIntentClassificationResponse.class),
+                "调用 FastAPI 意图分类服务失败"
+        );
+    }
+
+    /** 回答明确不依赖企业知识库的开放域、工具说明或澄清请求。 */
+    public FastApiChatResponse chatWithoutKnowledgeBase(String question, String mode) {
+        FastApiChatRequest request = new FastApiChatRequest(question, mode);
+        return callFastApi("NON_RAG_CHAT", "/chat", () ->
+                        fastApiRestClient.post()
+                                .uri("/chat")
+                                .body(request)
+                                .retrieve()
+                                .body(FastApiChatResponse.class),
+                "调用 FastAPI 非知识库聊天服务失败"
         );
     }
 

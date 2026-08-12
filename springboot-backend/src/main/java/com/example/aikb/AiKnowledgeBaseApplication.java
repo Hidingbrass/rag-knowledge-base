@@ -4,6 +4,8 @@ import com.example.aikb.config.AiRateLimitProperties;
 import com.example.aikb.config.AuthSecurityProperties;
 import com.example.aikb.config.FastApiProperties;
 import com.example.aikb.config.JwtProperties;
+import com.example.aikb.config.IntentRoutingProperties;
+import com.example.aikb.config.ToolExecutionProperties;
 import com.example.aikb.config.UploadLockProperties;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -20,6 +22,8 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
         FastApiProperties.class,
         AiRateLimitProperties.class,
         JwtProperties.class,
+        IntentRoutingProperties.class,
+        ToolExecutionProperties.class,
         UploadLockProperties.class,
         AuthSecurityProperties.class
 })

@@ -7,6 +7,7 @@ import com.example.aikb.entity.ChatMessage;
 import com.example.aikb.entity.ChatSession;
 import com.example.aikb.entity.KnowledgeBase;
 import com.example.aikb.entity.KnowledgeDocument;
+import com.example.aikb.entity.ToolAction;
 import com.example.aikb.enums.DocumentStatus;
 import com.example.aikb.enums.MessageRole;
 import com.example.aikb.exception.BusinessException;
@@ -15,6 +16,7 @@ import com.example.aikb.repository.ChatMessageRepository;
 import com.example.aikb.repository.ChatSessionRepository;
 import com.example.aikb.repository.KnowledgeDocumentRepository;
 import com.example.aikb.repository.KnowledgeBaseRepository;
+import com.example.aikb.repository.ToolActionRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -53,6 +55,9 @@ class KnowledgeBaseServiceTests {
 
     @Autowired
     private ChatMessageRepository chatMessageRepository;
+
+    @Autowired
+    private ToolActionRepository toolActionRepository;
 
     @MockBean
     private FastApiRagClient fastApiRagClient;
@@ -218,6 +223,15 @@ class KnowledgeBaseServiceTests {
                 UUID.randomUUID(), session.id(), MessageRole.USER, "什么是 RAG？", null,
                 null, null, now
         ));
+        UUID assistantMessageId = UUID.randomUUID();
+        chatMessageRepository.save(new ChatMessage(
+                assistantMessageId, session.id(), MessageRole.ASSISTANT, "待确认", null,
+                "tool_confirmation_required", null, now
+        ));
+        ToolAction action = toolActionRepository.save(new ToolAction(
+                UUID.randomUUID(), "user-1", "研发部", session.id(), assistantMessageId,
+                "delete_knowledge_document", "{}", now.plusSeconds(300), now
+        ));
 
         service.delete(knowledgeBase.id(), "user-1", "研发部");
 
@@ -226,5 +240,6 @@ class KnowledgeBaseServiceTests {
         assertThat(documentRepository.findById(document.id())).isEmpty();
         assertThat(chatSessionRepository.findById(session.id())).isEmpty();
         assertThat(chatMessageRepository.findBySessionIdOrderByCreatedAtAsc(session.id())).isEmpty();
+        assertThat(toolActionRepository.findById(action.id())).isEmpty();
     }
 }

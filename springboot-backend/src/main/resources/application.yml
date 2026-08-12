@@ -54,6 +54,9 @@ fastapi:
   default-sparse-limit: 6
 
 ai:
+  intent-routing:
+    # 与 FastAPI INTENT_CLASSIFIER_MIN_CONFIDENCE 使用同一个环境变量，避免双服务阈值漂移。
+    min-confidence: ${INTENT_CLASSIFIER_MIN_CONFIDENCE:0.90}
   rate-limit:
     enabled: ${AI_RATE_LIMIT_ENABLED:true}
     per-minute: ${AI_RATE_LIMIT_PER_MINUTE:5}
@@ -63,6 +66,16 @@ upload:
   lock:
     enabled: ${UPLOAD_LOCK_ENABLED:true}
     ttl-seconds: ${UPLOAD_LOCK_TTL_SECONDS:300}
+
+tools:
+  # 写操作确认只在服务端保存固定参数，默认 5 分钟后失效。
+  confirmation-ttl-seconds: ${TOOL_CONFIRMATION_TTL_SECONDS:300}
+  weather:
+    enabled: ${WEATHER_TOOL_ENABLED:true}
+    geocoding-base-url: ${WEATHER_GEOCODING_BASE_URL:https://geocoding-api.open-meteo.com}
+    forecast-base-url: ${WEATHER_FORECAST_BASE_URL:https://api.open-meteo.com}
+    connect-timeout-seconds: ${WEATHER_CONNECT_TIMEOUT_SECONDS:3}
+    read-timeout-seconds: ${WEATHER_READ_TIMEOUT_SECONDS:8}
 
 auth:
   security:

@@ -5,8 +5,9 @@
 
 from fastapi import APIRouter
 
-from app.schemas.chat import ChatRequest
+from app.schemas.chat import ChatRequest, IntentClassificationRequest
 from app.services.chat_service import chat_response
+from app.services.intent_service import classify_intent
 from app.services.model_runtime import collect_model_usage, current_model_usage
 
 
@@ -18,5 +19,14 @@ def chat(request: ChatRequest):
     """普通聊天接口。"""
     with collect_model_usage():
         response = chat_response(request)
+        response["model_usage"] = current_model_usage()
+        return response
+
+
+@router.post("/intent/classify")
+def classify_query_intent(request: IntentClassificationRequest):
+    """规则未命中后的内部意图分类接口。"""
+    with collect_model_usage():
+        response = classify_intent(request)
         response["model_usage"] = current_model_usage()
         return response

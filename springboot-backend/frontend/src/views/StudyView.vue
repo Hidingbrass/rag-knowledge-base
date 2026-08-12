@@ -113,6 +113,13 @@ watch(
                   <span v-if="message.retrievalMode" class="retrieval-tag">{{ message.retrievalMode }}</span>
                 </div>
                 <CitationList v-if="message.sourcesJson" :sources-json="message.sourcesJson"/>
+                <div v-if="message.toolAction?.status === 'PENDING'" class="tool-confirmation-card">
+                  <strong>需要你的二次确认</strong>
+                  <span>操作参数已由服务端锁定，确认前不会删除任何数据。</span>
+                  <button class="btn danger compact" :disabled="message.toolAction.running" @click="app.confirmToolAction(message)">
+                    {{ message.toolAction.running ? '正在执行…' : '确认删除文档' }}
+                  </button>
+                </div>
               </div>
             </article>
           </template>

@@ -20,6 +20,7 @@ public record ChatMessageResponse(
         String sourcesJson,
         String retrievalMode,
         Double rerankElapsedSeconds,
+        String routingDecisionJson,
         Instant createdAt
 ) {
 
@@ -32,6 +33,7 @@ public record ChatMessageResponse(
                 message.sourcesJson(),
                 message.retrievalMode(),
                 message.rerankElapsedSeconds(),
+                message.routingDecisionJson(),
                 message.createdAt()
         );
     }

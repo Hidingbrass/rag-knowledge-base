@@ -35,3 +35,35 @@ class ChatRequest(BaseModel):
 
     question: str = Field(min_length=1, max_length=settings.max_question_chars)
     history: list[ChatMessage] = Field(default_factory=list, max_length=20)
+    mode: Literal["open_domain_chat", "tool_call", "clarification"] = "open_domain_chat"
+
+
+class IntentClassificationRequest(BaseModel):
+    """规则路由未命中后，供内部查询路由器判断本轮意图。"""
+
+    question: str = Field(min_length=1, max_length=settings.max_question_chars)
+
+
+class IntentClassifierOutput(BaseModel):
+    """分类模型必须返回的最小 JSON 契约。"""
+
+    intent: Literal[
+        "KNOWLEDGE_QA",
+        "TOOL_CALL",
+        "CLARIFICATION",
+        "OPEN_DOMAIN_CHAT",
+    ]
+    confidence: float = Field(ge=0.0, le=1.0)
+    enterprise_knowledge: bool
+    reason_code: Literal[
+        "enterprise_knowledge",
+        "tool_request",
+        "needs_clarification",
+        "open_domain",
+    ]
+    knowledge_scope: Literal["ENTERPRISE", "PUBLIC", "UNKNOWN"] = "UNKNOWN"
+    operation: Literal["ANSWER", "READ_TOOL", "WRITE_TOOL", "CLARIFY"] = "ANSWER"
+    freshness: Literal["REALTIME", "STATIC", "UNKNOWN"] = "UNKNOWN"
+    tool_name: str | None = Field(default=None, max_length=64)
+    missing_fields: list[str] = Field(default_factory=list, max_length=10)
+    requires_confirmation: bool = False

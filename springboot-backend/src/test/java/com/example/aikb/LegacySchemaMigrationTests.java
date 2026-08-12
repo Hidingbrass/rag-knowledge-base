@@ -34,6 +34,11 @@ class LegacySchemaMigrationTests {
             assertThat(tableExists(connection, "job_resume_version")).isTrue();
             assertThat(columnExists(connection, "job_generated_task", "status")).isTrue();
             assertThat(columnExists(connection, "job_generated_task", "error_message")).isTrue();
+            assertThat(tableExists(connection, "chat_message")).isTrue();
+            assertThat(columnExists(connection, "chat_message", "routing_decision_json")).isTrue();
+            assertThat(tableExists(connection, "tool_action")).isTrue();
+            assertThat(columnExists(connection, "tool_action", "status")).isTrue();
+            assertThat(columnExists(connection, "tool_action", "expires_at")).isTrue();
         }
     }
 

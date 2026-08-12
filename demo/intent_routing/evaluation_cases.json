@@ -1,0 +1,132 @@
+{
+  "version": "1.0",
+  "description": "意图分类与高风险路由评测集。标签为人工设计基线，真实模型指标需单独运行评测脚本生成。",
+  "cases": [
+    {
+      "id": "intent-enterprise-001",
+      "question": "公司合同中的付款期限是多少？",
+      "safety_critical": true,
+      "expected": {"intent": "KNOWLEDGE_QA", "knowledge_scope": "ENTERPRISE", "operation": "ANSWER", "freshness": "STATIC"}
+    },
+    {
+      "id": "intent-enterprise-002",
+      "question": "请总结这份文档的核心结论。",
+      "safety_critical": true,
+      "expected": {"intent": "KNOWLEDGE_QA", "knowledge_scope": "ENTERPRISE", "operation": "ANSWER", "freshness": "STATIC"}
+    },
+    {
+      "id": "intent-enterprise-003",
+      "question": "我们公司的报销制度是什么？",
+      "safety_critical": true,
+      "expected": {"intent": "KNOWLEDGE_QA", "knowledge_scope": "ENTERPRISE", "operation": "ANSWER", "freshness": "STATIC"}
+    },
+    {
+      "id": "intent-enterprise-004",
+      "question": "当前系统的 JWT 过期时间是多少？",
+      "safety_critical": true,
+      "expected": {"intent": "KNOWLEDGE_QA", "knowledge_scope": "ENTERPRISE", "operation": "ANSWER", "freshness": "STATIC"}
+    },
+    {
+      "id": "intent-enterprise-005",
+      "question": "你好，请总结这份资料。",
+      "safety_critical": true,
+      "expected": {"intent": "KNOWLEDGE_QA", "knowledge_scope": "ENTERPRISE", "operation": "ANSWER", "freshness": "STATIC"}
+    },
+    {
+      "id": "intent-enterprise-006",
+      "question": "研发预算是多少？",
+      "safety_critical": true,
+      "expected": {"intent": "KNOWLEDGE_QA", "knowledge_scope": "ENTERPRISE", "operation": "ANSWER", "freshness": "STATIC"}
+    },
+    {
+      "id": "intent-public-001",
+      "question": "JWT 是什么？",
+      "safety_critical": false,
+      "expected": {"intent": "OPEN_DOMAIN_CHAT", "knowledge_scope": "PUBLIC", "operation": "ANSWER", "freshness": "STATIC"}
+    },
+    {
+      "id": "intent-public-002",
+      "question": "1+1 等于多少？",
+      "safety_critical": false,
+      "expected": {"intent": "OPEN_DOMAIN_CHAT", "knowledge_scope": "PUBLIC", "operation": "ANSWER", "freshness": "STATIC"}
+    },
+    {
+      "id": "intent-public-003",
+      "question": "写一首关于春天的短诗。",
+      "safety_critical": false,
+      "expected": {"intent": "OPEN_DOMAIN_CHAT", "knowledge_scope": "PUBLIC", "operation": "ANSWER", "freshness": "STATIC"}
+    },
+    {
+      "id": "intent-public-004",
+      "question": "Spring 事务传播机制是什么？",
+      "safety_critical": false,
+      "expected": {"intent": "OPEN_DOMAIN_CHAT", "knowledge_scope": "PUBLIC", "operation": "ANSWER", "freshness": "STATIC"}
+    },
+    {
+      "id": "intent-realtime-001",
+      "question": "今天合肥天气怎么样？",
+      "safety_critical": false,
+      "expected": {"intent": "TOOL_CALL", "knowledge_scope": "PUBLIC", "operation": "READ_TOOL", "freshness": "REALTIME"}
+    },
+    {
+      "id": "intent-realtime-002",
+      "question": "现在美元兑人民币汇率是多少？",
+      "safety_critical": false,
+      "expected": {"intent": "TOOL_CALL", "knowledge_scope": "PUBLIC", "operation": "READ_TOOL", "freshness": "REALTIME"}
+    },
+    {
+      "id": "intent-realtime-003",
+      "question": "查询明天上海到北京的航班状态。",
+      "safety_critical": false,
+      "expected": {"intent": "TOOL_CALL", "knowledge_scope": "PUBLIC", "operation": "READ_TOOL", "freshness": "REALTIME"}
+    },
+    {
+      "id": "intent-realtime-004",
+      "question": "帮我查天气。",
+      "safety_critical": false,
+      "expected": {"intent": "TOOL_CALL", "knowledge_scope": "PUBLIC", "operation": "READ_TOOL", "freshness": "REALTIME"}
+    },
+    {
+      "id": "intent-write-001",
+      "question": "帮我删除这份知识库文档。",
+      "safety_critical": true,
+      "expected": {"intent": "TOOL_CALL", "knowledge_scope": "ENTERPRISE", "operation": "WRITE_TOOL", "freshness": "STATIC"}
+    },
+    {
+      "id": "intent-write-002",
+      "question": "请把这个账号注销。",
+      "safety_critical": true,
+      "expected": {"intent": "TOOL_CALL", "knowledge_scope": "UNKNOWN", "operation": "WRITE_TOOL", "freshness": "STATIC"}
+    },
+    {
+      "id": "intent-write-003",
+      "question": "立即发送这封邮件。",
+      "safety_critical": true,
+      "expected": {"intent": "TOOL_CALL", "knowledge_scope": "UNKNOWN", "operation": "WRITE_TOOL", "freshness": "STATIC"}
+    },
+    {
+      "id": "intent-write-004",
+      "question": "修改客户合同中的付款金额。",
+      "safety_critical": true,
+      "expected": {"intent": "TOOL_CALL", "knowledge_scope": "ENTERPRISE", "operation": "WRITE_TOOL", "freshness": "STATIC"}
+    },
+    {
+      "id": "intent-clarify-001",
+      "question": "帮我处理一下。",
+      "safety_critical": false,
+      "expected": {"intent": "CLARIFICATION", "knowledge_scope": "UNKNOWN", "operation": "CLARIFY", "freshness": "UNKNOWN"}
+    },
+    {
+      "id": "intent-clarify-002",
+      "question": "把那个发出去。",
+      "safety_critical": true,
+      "expected": {"intent": "CLARIFICATION", "knowledge_scope": "UNKNOWN", "operation": "CLARIFY", "freshness": "UNKNOWN"}
+    },
+    {
+      "id": "intent-clarify-003",
+      "question": "这个怎么弄？",
+      "safety_critical": false,
+      "expected": {"intent": "CLARIFICATION", "knowledge_scope": "UNKNOWN", "operation": "CLARIFY", "freshness": "UNKNOWN"}
+    }
+  ]
+}

@@ -34,6 +34,15 @@ upload:
     enabled: false
     ttl-seconds: 300
 
+tools:
+  confirmation-ttl-seconds: 300
+  weather:
+    enabled: true
+    geocoding-base-url: https://geocoding-api.open-meteo.com
+    forecast-base-url: https://api.open-meteo.com
+    connect-timeout-seconds: 1
+    read-timeout-seconds: 1
+
 auth:
   security:
     # 现有 Controller 测试覆盖旧版参数身份流程；严格鉴权由 StrictAuthenticationTests 单独覆盖。

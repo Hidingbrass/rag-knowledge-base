@@ -67,6 +67,14 @@ def get_float_env(name: str, default: float) -> float:
     return float(value)
 
 
+def get_probability_env(name: str, default: float) -> float:
+    """读取 0 到 1 之间的概率配置。"""
+    value = get_float_env(name, default)
+    if value < 0.0 or value > 1.0:
+        raise ValueError(f"{name} 必须在 0 到 1 之间")
+    return value
+
+
 def get_bool_env(name: str, default: bool) -> bool:
     """读取布尔环境变量，并拒绝含义不明确的配置值。"""
     value = os.getenv(name)
@@ -113,6 +121,8 @@ class Settings:
     embedding_model: str
     embedding_dimensions: int
     chat_model: str
+    intent_model: str
+    intent_classifier_min_confidence: float
     rerank_model: str
     rerank_api_url: str
     request_timeout_seconds: float
@@ -157,6 +167,11 @@ settings = Settings(
     embedding_model=os.getenv("QWEN_EMBEDDING_MODEL", "text-embedding-v4"),
     embedding_dimensions=get_int_env("QWEN_EMBEDDING_DIMENSIONS", 1024),
     chat_model=os.getenv("QWEN_CHAT_MODEL", "qwen-plus"),
+    intent_model=os.getenv("QWEN_INTENT_MODEL", "qwen-flash"),
+    intent_classifier_min_confidence=get_probability_env(
+        "INTENT_CLASSIFIER_MIN_CONFIDENCE",
+        0.90,
+    ),
     rerank_model=os.getenv("QWEN_RERANK_MODEL", "qwen3-rerank"),
     rerank_api_url=os.getenv(
         "QWEN_RERANK_API_URL",

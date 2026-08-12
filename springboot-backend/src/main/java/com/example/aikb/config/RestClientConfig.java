@@ -4,6 +4,7 @@ import org.springframework.boot.web.client.ClientHttpRequestFactories;
 import org.springframework.boot.web.client.ClientHttpRequestFactorySettings;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.web.client.RestClient;
 
 import java.time.Duration;
@@ -31,6 +32,36 @@ public class RestClientConfig {
         applyInternalApiKey(builder, properties.apiKey());
 
         return builder.build();
+    }
+
+    @Bean
+    @Qualifier("weatherGeocodingRestClient")
+    public RestClient weatherGeocodingRestClient(ToolExecutionProperties properties) {
+        return externalRestClient(
+                properties.weather().geocodingBaseUrl(),
+                properties.weather().connectTimeoutSeconds(),
+                properties.weather().readTimeoutSeconds()
+        );
+    }
+
+    @Bean
+    @Qualifier("weatherForecastRestClient")
+    public RestClient weatherForecastRestClient(ToolExecutionProperties properties) {
+        return externalRestClient(
+                properties.weather().forecastBaseUrl(),
+                properties.weather().connectTimeoutSeconds(),
+                properties.weather().readTimeoutSeconds()
+        );
+    }
+
+    private RestClient externalRestClient(String baseUrl, int connectSeconds, int readSeconds) {
+        ClientHttpRequestFactorySettings settings = ClientHttpRequestFactorySettings.DEFAULTS
+                .withConnectTimeout(Duration.ofSeconds(connectSeconds))
+                .withReadTimeout(Duration.ofSeconds(readSeconds));
+        return RestClient.builder()
+                .baseUrl(baseUrl)
+                .requestFactory(ClientHttpRequestFactories.get(settings))
+                .build();
     }
 
     void applyInternalApiKey(RestClient.Builder builder, String apiKey) {
